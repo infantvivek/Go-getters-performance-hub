@@ -161,7 +161,7 @@ if st.session_state.auth:
 if not st.session_state.auth:
     col_l, col_r = st.columns([1, 4])
     with col_l: st.image(LOGO_URL, width=150)
-    with col_r: st.title("The Go-Getters Performance Hub")
+    with col_r: st.title("HighLevel Performance Hub")
     
     with st.form("login"):
         u_email = st.text_input("Work Email").lower().strip()
@@ -218,21 +218,18 @@ if not kpi_raw.empty:
 else:
     k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
 
-# --- 6. HIERARCHY DRILL-DOWN (GO-GETTERS SPECIFIC) ---
+# --- 6. HIERARCHY DRILL-DOWN ---
 access = str(user.get('level', 'IC')).strip()
 scoped_emails = []
 
-# For the Go-Getters app, Admin & Manager essentially share the same view controls
 if access in ["Admin", "Manager"]:
     mode = st.sidebar.selectbox("View Mode", ["Entire Team", "Specific Advisor"])
     
-    # Grab all unique emails in the database for the entire team scope
     all_team_emails = team_db['email'].dropna().unique().tolist()
     
     if mode == "Entire Team": 
         scoped_emails = all_team_emails
     else:
-        # Get purely ICs if strictly defined, otherwise show all names in the DB
         adv_options = team_db[team_db['level'] == 'IC']['name'].dropna().unique().tolist()
         if not adv_options: 
             adv_options = team_db['name'].dropna().unique().tolist()
@@ -321,12 +318,18 @@ with tab_perf:
 
 with tab_dsat:
     st.markdown("### DSAT Summary")
-    fb_col = f_dsat['feedback'].astype(str).str.strip().str.lower() if 'feedback' in f_dsat.columns else pd.Series([])
-    pending = len(fb_col[fb_col.isin(["nan", "-", ""])])
+    
+    # --- FIX: ROBUST PENDING DSAT CALCULATION ---
+    if 'feedback' in f_dsat.columns:
+        # Match actual NaNs, literal 'nan', empty strings, and dashes
+        is_missing = f_dsat['feedback'].isna() | f_dsat['feedback'].astype(str).str.strip().str.lower().isin(['', 'nan', '-', 'none'])
+        pending_count = is_missing.sum()
+    else:
+        pending_count = len(f_dsat)
     
     s1, s2, s3, s4 = st.columns(4)
     s1.metric("Total DSATs", f"{len(f_dsat)}")
-    s2.metric("Feedback Pending", f"{pending}")
+    s2.metric("Feedback Pending", f"{pending_count}")
     s3.metric("Controllable", f"{len(f_dsat[f_dsat['type'] == 'Controllable']) if 'type' in f_dsat.columns else 0}")
     s4.metric("Uncontrollable", f"{len(f_dsat[f_dsat['type'] == 'Uncontrollable']) if 'type' in f_dsat.columns else 0}")
 
@@ -438,9 +441,8 @@ with tab_report:
         if 'callabandons' in f_kpi.columns: rep_df['Call Abandons'] = f_kpi['callabandons'].fillna(0).astype(int)
         if 'ticketscreated' in f_kpi.columns: rep_df['Tickets Created'] = f_kpi['ticketscreated'].fillna(0).astype(int)
         
-        # --- NEW: BOLD AVERAGES & TOTALS SUMMARY ROW ---
         avg_row = {col: "" for col in rep_df.columns}
-        avg_row['Date'] = "AVERAGES & TOTALS" 
+        avg_row['Date'] = "AVG & TOTALS" 
         
         avg_ia = f_kpi['ia_min'].mean()
         avg_row['IA'] = f"{int(avg_ia // 60)}h {int(avg_ia % 60)}m" if pd.notna(avg_ia) else "-"
@@ -482,21 +484,16 @@ with tab_report:
         if 'Call Abandons' in rep_df.columns: avg_row['Call Abandons'] = int(f_kpi['callabandons'].fillna(0).sum())
         if 'Tickets Created' in rep_df.columns: avg_row['Tickets Created'] = int(f_kpi['ticketscreated'].fillna(0).sum())
         
-        # Append the summary row to the bottom of the DataFrame
         rep_df = pd.concat([rep_df, pd.DataFrame([avg_row])], ignore_index=True)
         
-        # Style the dataframe to make the last row bold, highlighted, and vertically padded
         def highlight_last_row(row):
             if row.name == rep_df.index[-1]:
-                # CSS string enforcing bold font, highlighting, and height
                 return ['font-weight: bold; background-color: #E5EDFF; color: #0052FF; padding: 15px 10px; font-size: 14px; border-top: 2px solid #0052FF;'] * len(row)
             return [''] * len(row)
 
         styled_df = rep_df.style.apply(highlight_last_row, axis=1)
 
-        # Render the styled dataframe
         st.dataframe(styled_df, hide_index=True, use_container_width=True)
-        # ------------------------------------------
         
         csv_data = rep_df.to_csv(index=False).encode('utf-8')
         st.download_button(
