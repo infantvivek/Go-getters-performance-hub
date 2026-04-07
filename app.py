@@ -85,8 +85,7 @@ def load_and_standardize(url, sheet_type):
             df['ia_min'] = df['ia_raw'].apply(parse_duration) if 'ia_raw' in df.columns else 0
             df['call_min'] = df['call_raw'].apply(parse_duration) if 'call_raw' in df.columns else 0
             df['shift_score'] = np.where(df['ia_min'] > 0, (df['call_min']/df['ia_min']*100), np.nan)
-        
-       if sheet_type == "DSAT":
+        if sheet_type == "DSAT":
             # Identify the correct date column
             date_col = df['date_raw'] if 'date_raw' in df.columns else df['ts_raw']
             
