@@ -57,23 +57,6 @@ def parse_duration(time_str):
         return (h * 60) + m
     except: return 0
 
-def safe_parse_dates(date_series):
-    if date_series is None or date_series.empty:
-        return pd.Series(dtype='datetime64[ns]')
-    
-    ds = date_series.astype(str).str.strip()
-    ds = ds.replace(['nan', 'None', '', 'NaT'], np.nan)
-    
-    s1 = pd.to_datetime(ds, format="%b'%d'%y", errors='coerce')
-    
-    failed_mask = s1.isna() & ds.notna()
-    if failed_mask.any():
-        cleaned = ds[failed_mask].str.replace("'", " ")
-        s2 = pd.to_datetime(cleaned, errors='coerce')
-        s1 = s1.fillna(s2)
-        
-    return s1
-
 @st.cache_data(ttl=60)
 def load_and_standardize(url, sheet_type):
     try:
@@ -90,10 +73,7 @@ def load_and_standardize(url, sheet_type):
             "totalsurvey": "surveys", "timestamp": "ts_raw", "processed": "date_raw", "chatdsaturl": "link", "datelevelas": "date_raw"
         }
         df = df.rename(columns=rmap)
-        
-        if 'email' in df.columns: 
-            df['email'] = df['email'].astype(str).str.strip().str.lower()
-            df['email'] = df['email'].replace('nan', np.nan)
+        if 'email' in df.columns: df['email'] = df['email'].astype(str).str.strip().str.lower()
         
         if sheet_type == "KPI":
             for col in ['sent_rate', 'sat_rate']:
@@ -101,22 +81,13 @@ def load_and_standardize(url, sheet_type):
                     df[col] = pd.to_numeric(df[col].astype(str).str.replace('%', ''), errors='coerce')
                     if df[col].max() <= 1.1: df[col] = df[col] * 100
             
-            df['date_dt'] = safe_parse_dates(df['date_raw']) if 'date_raw' in df.columns else pd.NaT
+            df['date_dt'] = pd.to_datetime(df['date_raw'], format="%b'%d'%y", errors='coerce')
             df['ia_min'] = df['ia_raw'].apply(parse_duration) if 'ia_raw' in df.columns else 0
             df['call_min'] = df['call_raw'].apply(parse_duration) if 'call_raw' in df.columns else 0
             df['shift_score'] = np.where(df['ia_min'] > 0, (df['call_min']/df['ia_min']*100), np.nan)
         
         if sheet_type == "DSAT":
-            if 'date_raw' in df.columns:
-                df['date_dt'] = safe_parse_dates(df['date_raw'])
-            elif 'ts_raw' in df.columns:
-                df['date_dt'] = safe_parse_dates(df['ts_raw'])
-            else:
-                df['date_dt'] = pd.NaT
-                
-            if 'type' in df.columns:
-                df['type'] = df['type'].astype(str).str.strip().replace('nan', '')
-                df['type'] = df['type'].apply(lambda x: x.title() if x else '')
+            df['date_dt'] = pd.to_datetime(df['date_raw'] if 'date_raw' in df.columns else df['ts_raw'], errors='coerce')
             
         return df
     except Exception as e:
@@ -124,11 +95,11 @@ def load_and_standardize(url, sheet_type):
 
 def create_metric_card(title, value, target=None, is_percent=True):
     if target:
-        if value >= target: color = "#22C55E" 
-        elif value >= target - 15: color = "#F59E0B" 
-        else: color = "#EF4444" 
+        if value >= target: color = "#22C55E" # Green
+        elif value >= target - 15: color = "#F59E0B" # Yellow
+        else: color = "#EF4444" # Red
     else:
-        color = "#0052FF" 
+        color = "#0052FF" # Default Blue
 
     val_str = f"{value:.2f}%" if is_percent else f"{int(value):,}"
     target_str = f"Target: {target}{'%' if is_percent else ''}" if target else "Activity Metric"
@@ -258,8 +229,6 @@ if access in ["Admin", "Manager"]:
     
     if mode == "Entire Team": 
         scoped_emails = all_team_emails
-        f_kpi = k_f 
-        f_dsat = d_f 
     else:
         adv_options = team_db[team_db['level'] == 'IC']['name'].dropna().unique().tolist()
         if not adv_options: 
@@ -268,13 +237,11 @@ if access in ["Admin", "Manager"]:
         adv_sel = st.sidebar.selectbox("Select Advisor", adv_options)
         found = team_db[team_db['name'] == adv_sel]['email'].tolist()
         scoped_emails = found if found else all_team_emails
-        
-        f_kpi = k_f[k_f['email'].isin(scoped_emails)]
-        f_dsat = d_f[d_f['email'].isin(scoped_emails)]
 else:
     scoped_emails = [user.get('email')]
-    f_kpi = k_f[k_f['email'].isin(scoped_emails)]
-    f_dsat = d_f[d_f['email'].isin(scoped_emails)]
+
+f_kpi = k_f[k_f['email'].isin(scoped_emails)]
+f_dsat = d_f[d_f['email'].isin(scoped_emails)]
 
 # --- 7. MAIN UI ---
 header_col1, header_col2 = st.columns([1, 10])
@@ -352,7 +319,9 @@ with tab_perf:
 with tab_dsat:
     st.markdown("### DSAT Summary")
     
+    # --- FIX: ROBUST PENDING DSAT CALCULATION ---
     if 'feedback' in f_dsat.columns:
+        # Match actual NaNs, literal 'nan', empty strings, and dashes
         is_missing = f_dsat['feedback'].isna() | f_dsat['feedback'].astype(str).str.strip().str.lower().isin(['', 'nan', '-', 'none'])
         pending_count = is_missing.sum()
     else:
@@ -366,9 +335,7 @@ with tab_dsat:
 
     st.markdown("### DSAT Details & Feedback")
     if not f_dsat.empty:
-        # --- BULLETPROOF RENDER LOOP ---
-        # Instead of merging and risking dropped rows, we iterate over f_dsat directly 
-        # and manually look up the name/manager from team_db on the fly.
+        f_table = f_dsat.merge(team_db[['email', 'name', 'mgr']], on='email', how='left')
         
         headers = ["Date", "Advisor Name"]
         col_w = [1.5, 2]
@@ -381,31 +348,16 @@ with tab_dsat:
         for i, h in enumerate(headers): header_cols[i].write(f"**{h}**")
         st.divider()
         
-        # Sort values to show newest first
-        f_dsat_sorted = f_dsat.sort_values(by='date_dt', ascending=False)
-        
-        for idx, row in f_dsat_sorted.reset_index().iterrows():
+        for idx, row in f_table.reset_index().iterrows():
             r = st.columns(col_w)
             date_str = str(row['date_dt'])[:10] if pd.notna(row['date_dt']) else "-"
             fb = row.get('feedback', '-')
             tp = row.get('type', '-')
             
-            # Manual Name Lookup
-            email = row.get('email', '')
-            match = team_db[team_db['email'] == email]
-            
-            if not match.empty:
-                adv_name = match.iloc[0]['name']
-                adv_mgr = match.iloc[0]['mgr']
-            else:
-                # Fallback extraction if exact email match fails
-                adv_name = str(email).split('@')[0].replace('.', ' ').title() if email and str(email) != 'nan' else 'Unknown Advisor'
-                adv_mgr = 'Vivek Infant'
-            
             c_idx = 0
             r[c_idx].write(date_str); c_idx += 1
-            r[c_idx].write(adv_name); c_idx += 1
-            if access == "Admin": r[c_idx].write(adv_mgr); c_idx += 1
+            r[c_idx].write(row.get('name', '-')); c_idx += 1
+            if access == "Admin": r[c_idx].write(row.get('mgr', '-')); c_idx += 1
             r[c_idx].markdown(f"[🔗 View Chat Context]({row.get('link', '#')})"); c_idx += 1
             r[c_idx].write(tp if str(tp) != 'nan' and tp != "" else "-"); c_idx += 1
             r[c_idx].write(fb if str(fb) != 'nan' and fb != "" else "-"); c_idx += 1
@@ -413,8 +365,6 @@ with tab_dsat:
             if access != "IC":
                 if r[c_idx].button("📝 Update", key=f"upd_{idx}"):
                     open_form_dialog(row)
-    else:
-        st.info("No DSAT entries found for the selected filters.")
 
 if tab_lead:
     with tab_lead:
@@ -534,8 +484,7 @@ with tab_report:
         if 'Call Abandons' in rep_df.columns: avg_row['Call Abandons'] = int(f_kpi['callabandons'].fillna(0).sum())
         if 'Tickets Created' in rep_df.columns: avg_row['Tickets Created'] = int(f_kpi['ticketscreated'].fillna(0).sum())
         
-        summary_df = pd.DataFrame([avg_row])
-        rep_df = pd.concat([rep_df, summary_df], ignore_index=True)
+        rep_df = pd.concat([rep_df, pd.DataFrame([avg_row])], ignore_index=True)
         
         def highlight_last_row(row):
             if row.name == rep_df.index[-1]:
