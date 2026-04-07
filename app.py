@@ -86,8 +86,15 @@ def load_and_standardize(url, sheet_type):
             df['call_min'] = df['call_raw'].apply(parse_duration) if 'call_raw' in df.columns else 0
             df['shift_score'] = np.where(df['ia_min'] > 0, (df['call_min']/df['ia_min']*100), np.nan)
         
-        if sheet_type == "DSAT":
-            df['date_dt'] = pd.to_datetime(df['date_raw'] if 'date_raw' in df.columns else df['ts_raw'], errors='coerce')
+       if sheet_type == "DSAT":
+            # Identify the correct date column
+            date_col = df['date_raw'] if 'date_raw' in df.columns else df['ts_raw']
+            
+            # Add dayfirst=True so Pandas knows it is DD/MM/YYYY
+            df['date_dt'] = pd.to_datetime(date_col, dayfirst=True, errors='coerce')
+            
+            # Optional: Forward-fill dates so blank "DUPLICATE" rows inherit the date from the row directly above them
+            df['date_dt'] = df['date_dt'].ffill()
             
         return df
     except Exception as e:
