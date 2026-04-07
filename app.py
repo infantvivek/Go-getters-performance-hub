@@ -14,6 +14,12 @@ KPI_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSU-KDmKs9i1EIEuIuJTu
 DSAT_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSU-KDmKs9i1EIEuIuJTuKKxG4nFZoPluRqOonP2BxRbQuVJunS8WQ9uJA6ayUCdoq043uFMH6u3UcM/pub?gid=367459010&single=true&output=csv"
 LOGO_URL = "https://s3.amazonaws.com/cdn.freshdesk.com/data/helpdesk/attachments/production/48175265495/original/PTXBCP40UHx-8LCKsM1zqLX-pq8nndFHSw.png?1641235482"
 
+# --- GOOGLE FORM CONFIGURATION ---
+FORM_ID = "1FAIpQLSdu2gEmHPZBCoUZ1naQlGTeJtgTgB47YfCENCfeKAHU1OA76g"
+ENTRY_KEY = "entry.1726897360"       
+ENTRY_TYPE = "entry.1303252108"      
+ENTRY_FEEDBACK = "entry.1754509958"  
+
 st.set_page_config(layout="wide", page_title="The Go-Getters Performance Hub", page_icon="🚀")
 
 # --- 2. SaaS/GHL THEME ENGINE ---
@@ -58,10 +64,8 @@ def safe_parse_dates(date_series):
     ds = date_series.astype(str).str.strip()
     ds = ds.replace(['nan', 'None', '', 'NaT'], np.nan)
     
-    # 1. Try the exact format %b'%d'%y (e.g., Feb'01'26)
     s1 = pd.to_datetime(ds, format="%b'%d'%y", errors='coerce')
     
-    # 2. For any that failed, replace quotes and try generic parsing
     failed_mask = s1.isna() & ds.notna()
     if failed_mask.any():
         cleaned = ds[failed_mask].str.replace("'", " ")
@@ -140,22 +144,13 @@ def create_metric_card(title, value, target=None, is_percent=True):
 
 @st.dialog("Update Feedback & Type", width="large")
 def open_form_dialog(row):
-    # Self-contained Form IDs to prevent scope errors on rerun
-    FORM_ID = "1FAIpQLSdu2gEmHPZBCoUZ1naQlGTeJtgTgB47YfCENCfeKAHU1OA76g"
-    ENTRY_KEY = "entry.1726897360"       
-    ENTRY_TYPE = "entry.1303252108"      
-    ENTRY_FEEDBACK = "entry.1754509958"
-    
     fb = row.get('feedback', '')
     tp = row.get('type', '')
-    
-    # Ensure URL formatting doesn't fail on nulls
     params = {
-        ENTRY_KEY: str(row.get('link', '')),
-        ENTRY_FEEDBACK: str(fb) if str(fb) != "nan" and fb != "-" else "",
-        ENTRY_TYPE: str(tp) if str(tp) != "nan" and tp != "-" else ""
+        ENTRY_KEY: row.get('link', ''),
+        ENTRY_FEEDBACK: fb if str(fb) != "nan" and fb != "-" else "",
+        ENTRY_TYPE: tp if str(tp) != "nan" and tp != "-" else ""
     }
-    
     url = f"https://docs.google.com/forms/d/e/{FORM_ID}/viewform?usp=pp_url&{urllib.parse.urlencode(params)}"
     
     st.markdown("### Update Data Repository")
@@ -356,6 +351,7 @@ with tab_perf:
 
 with tab_dsat:
     st.markdown("### DSAT Summary")
+    
     if 'feedback' in f_dsat.columns:
         is_missing = f_dsat['feedback'].isna() | f_dsat['feedback'].astype(str).str.strip().str.lower().isin(['', 'nan', '-', 'none'])
         pending_count = is_missing.sum()
@@ -370,8 +366,8 @@ with tab_dsat:
 
     st.markdown("### DSAT Details & Feedback")
     if not f_dsat.empty:
-        # Merge without duplicating existing team data
         clean_team_db = team_db[['email', 'name', 'mgr']].drop_duplicates(subset=['email'])
+        
         f_table = f_dsat.merge(clean_team_db, on='email', how='left')
         
         if 'name' in f_table.columns and 'email' in f_table.columns:
@@ -532,7 +528,9 @@ with tab_report:
         if 'Call Abandons' in rep_df.columns: avg_row['Call Abandons'] = int(f_kpi['callabandons'].fillna(0).sum())
         if 'Tickets Created' in rep_df.columns: avg_row['Tickets Created'] = int(f_kpi['ticketscreated'].fillna(0).sum())
         
-        rep_df = pd.concat([rep_df, pd.DataFrame([avg_row])], ignore_index=True)
+        # Fix: Create a new DataFrame and concatenate
+        summary_df = pd.DataFrame([avg_row])
+        rep_df = pd.concat([rep_df, summary_df], ignore_index=True)
         
         def highlight_last_row(row):
             if row.name == rep_df.index[-1]:
