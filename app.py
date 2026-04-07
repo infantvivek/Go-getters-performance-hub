@@ -63,7 +63,6 @@ def load_and_standardize(url, sheet_type):
         fresh_url = f"{url}&_t={int(time.time())}" if "?" in url else f"{url}?_t={int(time.time())}"
         
         df = pd.read_csv(fresh_url)
-        # Clean column headers universally (lowercase, no spaces/special chars)
         df.columns = [re.sub(r'[^a-zA-Z0-9]', '', str(c)).lower() for c in df.columns]
         
         rmap = {
@@ -74,10 +73,7 @@ def load_and_standardize(url, sheet_type):
             "totalsurvey": "surveys", "timestamp": "ts_raw", "processed": "date_raw", "chatdsaturl": "link", "datelevelas": "date_raw"
         }
         df = df.rename(columns=rmap)
-        
-        # Ensure email is perfectly stripped to prevent mismatched filtering
-        if 'email' in df.columns: 
-            df['email'] = df['email'].astype(str).str.strip().str.lower()
+        if 'email' in df.columns: df['email'] = df['email'].astype(str).str.strip().str.lower()
         
         if sheet_type == "KPI":
             for col in ['sent_rate', 'sat_rate']:
@@ -91,13 +87,7 @@ def load_and_standardize(url, sheet_type):
             df['shift_score'] = np.where(df['ia_min'] > 0, (df['call_min']/df['ia_min']*100), np.nan)
         
         if sheet_type == "DSAT":
-            # Allow Pandas to cleanly infer the 'Feb 26, 2026' format 
-            if 'date_raw' in df.columns:
-                df['date_dt'] = pd.to_datetime(df['date_raw'], errors='coerce')
-            elif 'ts_raw' in df.columns:
-                df['date_dt'] = pd.to_datetime(df['ts_raw'], errors='coerce')
-            else:
-                df['date_dt'] = pd.NaT
+            df['date_dt'] = pd.to_datetime(df['date_raw'] if 'date_raw' in df.columns else df['ts_raw'], errors='coerce')
             
         return df
     except Exception as e:
@@ -329,8 +319,9 @@ with tab_perf:
 with tab_dsat:
     st.markdown("### DSAT Summary")
     
-    # Enhanced blank checking logic to catch NaN, "", "-", "None"
+    # --- FIX: ROBUST PENDING DSAT CALCULATION ---
     if 'feedback' in f_dsat.columns:
+        # Match actual NaNs, literal 'nan', empty strings, and dashes
         is_missing = f_dsat['feedback'].isna() | f_dsat['feedback'].astype(str).str.strip().str.lower().isin(['', 'nan', '-', 'none'])
         pending_count = is_missing.sum()
     else:
