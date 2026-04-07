@@ -366,17 +366,10 @@ with tab_dsat:
 
     st.markdown("### DSAT Details & Feedback")
     if not f_dsat.empty:
-        clean_team_db = team_db[['email', 'name', 'mgr']].drop_duplicates(subset=['email'])
+        # --- BULLETPROOF RENDER LOOP ---
+        # Instead of merging and risking dropped rows, we iterate over f_dsat directly 
+        # and manually look up the name/manager from team_db on the fly.
         
-        f_table = f_dsat.merge(clean_team_db, on='email', how='left')
-        
-        if 'name' in f_table.columns and 'email' in f_table.columns:
-            f_table['name'] = f_table['name'].fillna(
-                f_table['email'].apply(lambda x: str(x).split('@')[0].replace('.', ' ').title() if pd.notna(x) and str(x) != 'nan' else 'Unknown Advisor')
-            )
-        if 'mgr' in f_table.columns:
-            f_table['mgr'] = f_table['mgr'].fillna('Vivek Infant')
-
         headers = ["Date", "Advisor Name"]
         col_w = [1.5, 2]
         if access == "Admin": headers.append("Manager"); col_w.append(1.5)
@@ -388,18 +381,31 @@ with tab_dsat:
         for i, h in enumerate(headers): header_cols[i].write(f"**{h}**")
         st.divider()
         
-        f_table = f_table.sort_values(by='date_dt', ascending=False)
+        # Sort values to show newest first
+        f_dsat_sorted = f_dsat.sort_values(by='date_dt', ascending=False)
         
-        for idx, row in f_table.reset_index().iterrows():
+        for idx, row in f_dsat_sorted.reset_index().iterrows():
             r = st.columns(col_w)
             date_str = str(row['date_dt'])[:10] if pd.notna(row['date_dt']) else "-"
             fb = row.get('feedback', '-')
             tp = row.get('type', '-')
             
+            # Manual Name Lookup
+            email = row.get('email', '')
+            match = team_db[team_db['email'] == email]
+            
+            if not match.empty:
+                adv_name = match.iloc[0]['name']
+                adv_mgr = match.iloc[0]['mgr']
+            else:
+                # Fallback extraction if exact email match fails
+                adv_name = str(email).split('@')[0].replace('.', ' ').title() if email and str(email) != 'nan' else 'Unknown Advisor'
+                adv_mgr = 'Vivek Infant'
+            
             c_idx = 0
             r[c_idx].write(date_str); c_idx += 1
-            r[c_idx].write(row.get('name', '-')); c_idx += 1
-            if access == "Admin": r[c_idx].write(row.get('mgr', '-')); c_idx += 1
+            r[c_idx].write(adv_name); c_idx += 1
+            if access == "Admin": r[c_idx].write(adv_mgr); c_idx += 1
             r[c_idx].markdown(f"[🔗 View Chat Context]({row.get('link', '#')})"); c_idx += 1
             r[c_idx].write(tp if str(tp) != 'nan' and tp != "" else "-"); c_idx += 1
             r[c_idx].write(fb if str(fb) != 'nan' and fb != "" else "-"); c_idx += 1
@@ -528,7 +534,6 @@ with tab_report:
         if 'Call Abandons' in rep_df.columns: avg_row['Call Abandons'] = int(f_kpi['callabandons'].fillna(0).sum())
         if 'Tickets Created' in rep_df.columns: avg_row['Tickets Created'] = int(f_kpi['ticketscreated'].fillna(0).sum())
         
-        # Fix: Create a new DataFrame and concatenate
         summary_df = pd.DataFrame([avg_row])
         rep_df = pd.concat([rep_df, summary_df], ignore_index=True)
         
