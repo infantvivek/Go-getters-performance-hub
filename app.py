@@ -57,12 +57,24 @@ def parse_duration(time_str):
         return (h * 60) + m
     except: return 0
 
+def safe_parse_dates(date_series):
+    """Bulletproof date parser for specific GHL formats and generic fallbacks."""
+    if date_series is None or date_series.empty:
+        return pd.Series(dtype='datetime64[ns]')
+    # First, attempt the exact known format (e.g. Feb'01'26)
+    s1 = pd.to_datetime(date_series, format="%b'%d'%y", errors='coerce')
+    # Fill remaining NaTs by forcing standard pandas parsing
+    s2 = pd.to_datetime(date_series, errors='coerce')
+    return s1.fillna(s2)
+
 @st.cache_data(ttl=60)
 def load_and_standardize(url, sheet_type):
     try:
+        # Cache-busting parameter to bypass Google's CDN
         fresh_url = f"{url}&_t={int(time.time())}" if "?" in url else f"{url}?_t={int(time.time())}"
         
         df = pd.read_csv(fresh_url)
+        # Clean headers to lowercase and alphanumeric only
         df.columns = [re.sub(r'[^a-zA-Z0-9]', '', str(c)).lower() for c in df.columns]
         
         rmap = {
@@ -74,7 +86,7 @@ def load_and_standardize(url, sheet_type):
         }
         df = df.rename(columns=rmap)
         
-        # HYPER-AGGRESSIVE EMAIL SANITIZATION
+        # Hyper-aggressive Email Sanitization
         if 'email' in df.columns: 
             df['email'] = df['email'].astype(str).str.strip().str.lower()
             df['email'] = df['email'].replace('nan', np.nan)
@@ -85,19 +97,24 @@ def load_and_standardize(url, sheet_type):
                     df[col] = pd.to_numeric(df[col].astype(str).str.replace('%', ''), errors='coerce')
                     if df[col].max() <= 1.1: df[col] = df[col] * 100
             
-            df['date_dt'] = pd.to_datetime(df['date_raw'], format="%b'%d'%y", errors='coerce')
+            df['date_dt'] = safe_parse_dates(df['date_raw']) if 'date_raw' in df.columns else pd.NaT
             df['ia_min'] = df['ia_raw'].apply(parse_duration) if 'ia_raw' in df.columns else 0
             df['call_min'] = df['call_raw'].apply(parse_duration) if 'call_raw' in df.columns else 0
             df['shift_score'] = np.where(df['ia_min'] > 0, (df['call_min']/df['ia_min']*100), np.nan)
         
         if sheet_type == "DSAT":
-            # Aggressive Date Parsing
+            # Apply robust date parsing
             if 'date_raw' in df.columns:
-                df['date_dt'] = pd.to_datetime(df['date_raw'], errors='coerce')
+                df['date_dt'] = safe_parse_dates(df['date_raw'])
             elif 'ts_raw' in df.columns:
-                df['date_dt'] = pd.to_datetime(df['ts_raw'], errors='coerce')
+                df['date_dt'] = safe_parse_dates(df['ts_raw'])
             else:
                 df['date_dt'] = pd.NaT
+                
+            # Aggressive sanitization of Type to avoid trailing space mismatches
+            if 'type' in df.columns:
+                df['type'] = df['type'].astype(str).str.strip().replace('nan', '')
+                df['type'] = df['type'].apply(lambda x: x.title() if x else '')
             
         return df
     except Exception as e:
@@ -251,8 +268,6 @@ else:
     scoped_emails = [user.get('email')]
 
 f_kpi = k_f[k_f['email'].isin(scoped_emails)]
-
-# Ensure DSAT is properly scoped by the cleaned emails
 f_dsat = d_f[d_f['email'].isin(scoped_emails)]
 
 # --- 7. MAIN UI ---
@@ -356,6 +371,9 @@ with tab_dsat:
         header_cols = st.columns(col_w)
         for i, h in enumerate(headers): header_cols[i].write(f"**{h}**")
         st.divider()
+        
+        # Sort values to show newest first
+        f_table = f_table.sort_values(by='date_dt', ascending=False)
         
         for idx, row in f_table.reset_index().iterrows():
             r = st.columns(col_w)
