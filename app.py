@@ -261,8 +261,8 @@ if access in ["Admin", "Manager"]:
     
     if mode == "Entire Team": 
         scoped_emails = all_team_emails
-        f_kpi = k_f # Keep all KPIs for Go-Getters
-        f_dsat = d_f # FORCE ALL DSATs to show, bypassing email mismatch filtering completely
+        f_kpi = k_f 
+        f_dsat = d_f # FORCE ALL DSATs for the selected period to show
     else:
         adv_options = team_db[team_db['level'] == 'IC']['name'].dropna().unique().tolist()
         if not adv_options: 
@@ -368,10 +368,13 @@ with tab_dsat:
 
     st.markdown("### DSAT Details & Feedback")
     if not f_dsat.empty:
-        # Merge, guaranteeing we don't drop rows if email doesn't perfectly match
-        f_table = f_dsat.merge(team_db[['email', 'name', 'mgr']], on='email', how='left')
+        # 1. Drop duplicates in Team_DB before merge to prevent accidental cross-join multiplication
+        clean_team_db = team_db[['email', 'name', 'mgr']].drop_duplicates(subset=['email'])
         
-        # SMART NAME EXTRACTION FALLBACK: If email didn't match team_db perfectly, extract name from the email
+        # 2. Merge, guaranteeing we keep all DSAT rows
+        f_table = f_dsat.merge(clean_team_db, on='email', how='left')
+        
+        # 3. SMART NAME EXTRACTION: Ensure we still have an Advisor Name even if email didn't match the Team sheet
         if 'name' in f_table.columns and 'email' in f_table.columns:
             f_table['name'] = f_table['name'].fillna(
                 f_table['email'].apply(lambda x: str(x).split('@')[0].replace('.', ' ').title() if pd.notna(x) and str(x) != 'nan' else 'Unknown Advisor')
@@ -409,6 +412,8 @@ with tab_dsat:
             if access != "IC":
                 if r[c_idx].button("📝 Update", key=f"upd_{idx}"):
                     open_form_dialog(row)
+    else:
+        st.info("No DSAT entries found for the selected filters.")
 
 if tab_lead:
     with tab_lead:
