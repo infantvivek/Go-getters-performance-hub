@@ -56,45 +56,28 @@ def parse_duration(time_str):
             elif 'm' in p: m = int(re.sub(r'\D', '', p))
         return (h * 60) + m
     except: return 0
+
 @st.cache_data(ttl=60)
 def load_and_standardize(url, sheet_type):
     try:
         fresh_url = f"{url}&_t={int(time.time())}" if "?" in url else f"{url}?_t={int(time.time())}"
         
         df = pd.read_csv(fresh_url)
+        df.columns = [re.sub(r'[^a-zA-Z0-9]', '', str(c)).lower() for c in df.columns]
         
-        # 1. Clean headers (lowercase and remove extra spaces)
-        df.columns = df.columns.str.strip().str.lower()
-        
-        # 2. Comprehensive mapping dictionary 
-        # (We map both the KPI sheet headers and the exact DSAT sheet headers)
         rmap = {
-            # KPI / Team Detail Mappings
-            "advisor name": "name", "agent name": "name", "advisorname": "name", "agentname": "name",
-            "email": "email", "advisor email": "email", "advisoremail": "email",
-            "manager": "mgr", "manager name": "mgr", "managername": "mgr",
-            "access level": "level", "accesslevel": "level",
-            "password": "pass",
-            "ia": "ia_raw", "advisor call time": "call_raw", "advisorcalltime": "call_raw",
-            "sent rate": "sent_rate", "sentrate": "sent_rate",
-            "satisfied survey": "sat_rate", "satisfiedsurvey": "sat_rate",
-            "ob calls": "ob", "obcalls": "ob",
-            "qa calls": "qa", "qacalls": "qa",
-            "total survey": "surveys", "totalsurvey": "surveys",
-            "processed": "date_raw", "timestamp": "ts_raw", "date level as": "date_raw", "datelevelas": "date_raw",
-            
-            # Specific DSAT Sheet Mappings (Based on your screenshot)
-            "customer email": "cust_email",
-            "chat dsat url": "link", "chatdsaturl": "link",
-            "feedback": "feedback",
-            "type": "type"
+            "advisorname": "name", "agentname": "name", "email": "email", "advisoremail": "email",
+            "manager": "mgr", "managername": "mgr", "accesslevel": "level", "password": "pass",
+            "ia": "ia_raw", "advisorcalltime": "call_raw", "sentrate": "sent_rate", 
+            "satisfiedsurvey": "sat_rate", "obcalls": "ob", "qacalls": "qa", 
+            "totalsurvey": "surveys", "timestamp": "ts_raw", "processed": "date_raw", "chatdsaturl": "link", "datelevelas": "date_raw"
         }
-        
         df = df.rename(columns=rmap)
         
-        # Ensure email column is clean for matching
+        # HYPER-AGGRESSIVE EMAIL SANITIZATION
         if 'email' in df.columns: 
             df['email'] = df['email'].astype(str).str.strip().str.lower()
+            df['email'] = df['email'].replace('nan', np.nan)
         
         if sheet_type == "KPI":
             for col in ['sent_rate', 'sat_rate']:
@@ -102,20 +85,15 @@ def load_and_standardize(url, sheet_type):
                     df[col] = pd.to_numeric(df[col].astype(str).str.replace('%', ''), errors='coerce')
                     if df[col].max() <= 1.1: df[col] = df[col] * 100
             
-            df['date_dt'] = pd.to_datetime(df['date_raw'], format="%b'%d'%y", errors='coerce') if 'date_raw' in df.columns else pd.NaT
+            df['date_dt'] = pd.to_datetime(df['date_raw'], format="%b'%d'%y", errors='coerce')
             df['ia_min'] = df['ia_raw'].apply(parse_duration) if 'ia_raw' in df.columns else 0
             df['call_min'] = df['call_raw'].apply(parse_duration) if 'call_raw' in df.columns else 0
             df['shift_score'] = np.where(df['ia_min'] > 0, (df['call_min']/df['ia_min']*100), np.nan)
         
         if sheet_type == "DSAT":
-            # Handle DSAT dates robustly
+            # Aggressive Date Parsing
             if 'date_raw' in df.columns:
-                # First try the standard format, if that fails, try to infer it
-                df['date_dt'] = pd.to_datetime(df['date_raw'], format="%b'%d'%y", errors='coerce')
-                # For any that failed (NaT), try aggressive inference
-                mask = df['date_dt'].isna()
-                if mask.any():
-                    df.loc[mask, 'date_dt'] = pd.to_datetime(df.loc[mask, 'date_raw'], errors='coerce')
+                df['date_dt'] = pd.to_datetime(df['date_raw'], errors='coerce')
             elif 'ts_raw' in df.columns:
                 df['date_dt'] = pd.to_datetime(df['ts_raw'], errors='coerce')
             else:
@@ -123,7 +101,6 @@ def load_and_standardize(url, sheet_type):
             
         return df
     except Exception as e:
-        print(f"Error loading {sheet_type}: {e}") # This will print to your Streamlit Cloud logs if it fails
         return pd.DataFrame()
 
 def create_metric_card(title, value, target=None, is_percent=True):
@@ -274,6 +251,8 @@ else:
     scoped_emails = [user.get('email')]
 
 f_kpi = k_f[k_f['email'].isin(scoped_emails)]
+
+# Ensure DSAT is properly scoped by the cleaned emails
 f_dsat = d_f[d_f['email'].isin(scoped_emails)]
 
 # --- 7. MAIN UI ---
