@@ -65,31 +65,74 @@ def load_and_standardize(url, sheet_type):
         df = pd.read_csv(fresh_url)
         df.columns = [re.sub(r'[^a-zA-Z0-9]', '', str(c)).lower() for c in df.columns]
         
-        rmap = {
-            "advisorname": "name", "agentname": "name", "email": "email", "advisoremail": "email",
-            "manager": "mgr", "managername": "mgr", "accesslevel": "level", "password": "pass",
-            "ia": "ia_raw", "advisorcalltime": "call_raw", "sentrate": "sent_rate", 
-            "satisfiedsurvey": "sat_rate", "obcalls": "ob", "qacalls": "qa", 
-            "totalsurvey": "surveys", "timestamp": "ts_raw", "processed": "date_raw", "chatdsaturl": "link", "datelevelas": "date_raw"
-        }
-        df = df.rename(columns=rmap)
-        if 'email' in df.columns: df['email'] = df['email'].astype(str).str.strip().str.lower()
-        
-        if sheet_type == "KPI":
+        if sheet_type == "TEAM":
+            rmap = {
+                "advisorname": "name", "agentname": "name", "email": "email", "advisoremail": "email",
+                "manager": "mgr", "managername": "mgr", "accesslevel": "level", "password": "pass"
+            }
+            for old, new in rmap.items():
+                if old in df.columns and new not in df.columns:
+                    df.rename(columns={old: new}, inplace=True)
+            if 'email' in df.columns: df['email'] = df['email'].astype(str).str.strip().str.lower()
+            return df
+            
+        elif sheet_type == "KPI":
+            rmap = {
+                "advisorname": "name", "agentname": "name", "email": "email", "advisoremail": "email",
+                "manager": "mgr", "managername": "mgr",
+                "ia": "ia_raw", "advisorcalltime": "call_raw", "sentrate": "sent_rate", 
+                "satisfiedsurvey": "sat_rate", "obcalls": "ob", "qacalls": "qa", 
+                "totalsurvey": "surveys", "processed": "date_raw"
+            }
+            for old, new in rmap.items():
+                if old in df.columns and new not in df.columns:
+                    df.rename(columns={old: new}, inplace=True)
+            
+            if 'email' in df.columns: df['email'] = df['email'].astype(str).str.strip().str.lower()
+            
             for col in ['sent_rate', 'sat_rate']:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col].astype(str).str.replace('%', ''), errors='coerce')
                     if df[col].max() <= 1.1: df[col] = df[col] * 100
             
-            df['date_dt'] = pd.to_datetime(df['date_raw'], format="%b'%d'%y", errors='coerce')
+            df['date_dt'] = pd.to_datetime(df['date_raw'], format="%b'%d'%y", errors='coerce') if 'date_raw' in df.columns else pd.NaT
             df['ia_min'] = df['ia_raw'].apply(parse_duration) if 'ia_raw' in df.columns else 0
             df['call_min'] = df['call_raw'].apply(parse_duration) if 'call_raw' in df.columns else 0
             df['shift_score'] = np.where(df['ia_min'] > 0, (df['call_min']/df['ia_min']*100), np.nan)
-        
-        if sheet_type == "DSAT":
-            df['date_dt'] = pd.to_datetime(df['date_raw'] if 'date_raw' in df.columns else df['ts_raw'], errors='coerce')
+            return df
             
-        return df
+        elif sheet_type == "DSAT":
+            # FIX: Priority Mapping to prevent duplicate column crashing
+            if 'advisoremail' in df.columns: df.rename(columns={'advisoremail': 'email'}, inplace=True)
+            elif 'emailaddress' in df.columns: df.rename(columns={'emailaddress': 'email'}, inplace=True)
+                
+            if 'datelevelas' in df.columns: df.rename(columns={'datelevelas': 'date_raw'}, inplace=True)
+            elif 'processed' in df.columns: df.rename(columns={'processed': 'date_raw'}, inplace=True)
+                
+            if 'agentname' in df.columns: df.rename(columns={'agentname': 'name'}, inplace=True)
+            elif 'advisorname' in df.columns: df.rename(columns={'advisorname': 'name'}, inplace=True)
+                
+            if 'chatdsaturl' in df.columns: df.rename(columns={'chatdsaturl': 'link'}, inplace=True)
+            if 'timestamp' in df.columns: df.rename(columns={'timestamp': 'ts_raw'}, inplace=True)
+            
+            if 'email' in df.columns: df['email'] = df['email'].astype(str).str.strip().str.lower()
+            
+            # Robust Date Parsing 
+            if 'date_raw' in df.columns:
+                try:
+                    df['date_dt'] = pd.to_datetime(df['date_raw'], format='mixed', errors='coerce')
+                except Exception:
+                    df['date_dt'] = pd.to_datetime(df['date_raw'], errors='coerce')
+            elif 'ts_raw' in df.columns:
+                try:
+                    df['date_dt'] = pd.to_datetime(df['ts_raw'], format='mixed', errors='coerce')
+                except Exception:
+                    df['date_dt'] = pd.to_datetime(df['ts_raw'], errors='coerce')
+            else:
+                df['date_dt'] = pd.NaT
+            
+            return df
+            
     except Exception as e:
         return pd.DataFrame()
 
@@ -318,15 +361,12 @@ with tab_perf:
 
 with tab_dsat:
     st.markdown("### DSAT Summary")
-    
-    # --- FIX: ROBUST PENDING DSAT CALCULATION ---
     if 'feedback' in f_dsat.columns:
-        # Match actual NaNs, literal 'nan', empty strings, and dashes
         is_missing = f_dsat['feedback'].isna() | f_dsat['feedback'].astype(str).str.strip().str.lower().isin(['', 'nan', '-', 'none'])
         pending_count = is_missing.sum()
     else:
         pending_count = len(f_dsat)
-    
+        
     s1, s2, s3, s4 = st.columns(4)
     s1.metric("Total DSATs", f"{len(f_dsat)}")
     s2.metric("Feedback Pending", f"{pending_count}")
