@@ -63,6 +63,7 @@ def load_and_standardize(url, sheet_type):
         fresh_url = f"{url}&_t={int(time.time())}" if "?" in url else f"{url}?_t={int(time.time())}"
         
         df = pd.read_csv(fresh_url)
+        # Strip special characters and spaces from headers for robust mapping
         df.columns = [re.sub(r'[^a-zA-Z0-9]', '', str(c)).lower() for c in df.columns]
         
         rmap = {
@@ -87,7 +88,13 @@ def load_and_standardize(url, sheet_type):
             df['shift_score'] = np.where(df['ia_min'] > 0, (df['call_min']/df['ia_min']*100), np.nan)
         
         if sheet_type == "DSAT":
-            df['date_dt'] = pd.to_datetime(df['date_raw'] if 'date_raw' in df.columns else df['ts_raw'], errors='coerce')
+            # Explicit, aggressive date parsing to ensure rows don't vanish during filtering
+            if 'date_raw' in df.columns:
+                df['date_dt'] = pd.to_datetime(df['date_raw'], errors='coerce')
+            elif 'ts_raw' in df.columns:
+                df['date_dt'] = pd.to_datetime(df['ts_raw'], errors='coerce')
+            else:
+                df['date_dt'] = pd.NaT
             
         return df
     except Exception as e:
@@ -318,10 +325,7 @@ with tab_perf:
 
 with tab_dsat:
     st.markdown("### DSAT Summary")
-    
-    # --- FIX: ROBUST PENDING DSAT CALCULATION ---
     if 'feedback' in f_dsat.columns:
-        # Match actual NaNs, literal 'nan', empty strings, and dashes
         is_missing = f_dsat['feedback'].isna() | f_dsat['feedback'].astype(str).str.strip().str.lower().isin(['', 'nan', '-', 'none'])
         pending_count = is_missing.sum()
     else:
