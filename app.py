@@ -192,7 +192,6 @@ kpi_raw = load_and_standardize(KPI_URL, "KPI")
 dsat_raw = load_and_standardize(DSAT_URL, "DSAT")
 
 st.sidebar.title("Navigation Filters")
-# Added "Custom" to the frequency options
 freq = st.sidebar.radio("Frequency", ["Daily", "Weekly", "Monthly", "Yearly", "Custom"], horizontal=True)
 
 if not kpi_raw.empty:
@@ -224,25 +223,26 @@ if not kpi_raw.empty:
         else: k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
         
     elif freq == "Custom":
-        # --- NEW: Custom Date Range Logic ---
-        # Find min and max dates in the dataset to set calendar bounds
-        min_date = kpi_raw['date_dt'].min().date() if not kpi_raw['date_dt'].dropna().empty else None
-        max_date = kpi_raw['date_dt'].max().date() if not kpi_raw['date_dt'].dropna().empty else None
+        # --- EXPLICIT START & END DATE FIELDS ---
+        min_date = kpi_raw['date_dt'].min().date() if not kpi_raw['date_dt'].dropna().empty else pd.to_datetime('today').date()
+        max_date = kpi_raw['date_dt'].max().date() if not kpi_raw['date_dt'].dropna().empty else pd.to_datetime('today').date()
         
-        date_range = st.sidebar.date_input(
-            "Select Date Range",
-            value=(min_date, max_date) if min_date and max_date else None,
-            min_value=min_date,
-            max_value=max_date
-        )
-        
-        # Check if the user has selected both a start AND end date
-        if isinstance(date_range, tuple) and len(date_range) == 2:
-            start_date, end_date = date_range
+        # Put them side-by-side in the sidebar to save space
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            start_date = st.date_input("Start Date", value=min_date, min_value=min_date, max_value=max_date)
+        with col2:
+            # We set the min_value of the end date to the chosen start date to prevent backward selection
+            end_date = st.date_input("End Date", value=max_date, min_value=start_date, max_value=max_date)
             
-            # Convert to Pandas datetime for accurate filtering
+        # Validation check
+        if start_date > end_date:
+            st.sidebar.error("End date cannot be before start date.")
+            # Return empty dataframes to hide data until the error is fixed
+            k_f = pd.DataFrame(columns=kpi_raw.columns)
+            d_f = pd.DataFrame(columns=dsat_raw.columns)
+        else:
             start_dt = pd.to_datetime(start_date)
-            # Add 1 day minus 1 second to end_dt to include the entire end day (up to 23:59:59)
             end_dt = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
             
             k_f = kpi_raw[(kpi_raw['date_dt'] >= start_dt) & (kpi_raw['date_dt'] <= end_dt)]
@@ -250,12 +250,6 @@ if not kpi_raw.empty:
                 d_f = dsat_raw[(dsat_raw['date_dt'] >= start_dt) & (dsat_raw['date_dt'] <= end_dt)]
             else:
                 d_f = dsat_raw.copy()
-        else:
-            # If they have only clicked the start date, prompt them to click an end date
-            st.sidebar.warning("Please select an end date.")
-            # Return empty dataframes to hide data until a full range is selected
-            k_f = pd.DataFrame(columns=kpi_raw.columns)
-            d_f = pd.DataFrame(columns=dsat_raw.columns)
 else:
     k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
 # --- 6. HIERARCHY DRILL-DOWN ---
