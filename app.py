@@ -328,6 +328,46 @@ with tab_perf:
     c5.markdown(create_metric_card("Total OB Calls", tot_ob, None, False), unsafe_allow_html=True)
     c6.markdown(create_metric_card("Total QA Calls", tot_qa, None, False), unsafe_allow_html=True)
 
+    # --- NEW: ROW 2 FOR ADDITIONAL STATS ---
+    c7, c8, c9, c10, c11, c12 = st.columns(6)
+    
+    # Custom card formatter for strings/decimals (prevents breaking the global int/pct card)
+    def format_custom_card(title, val, color, sub_txt):
+        return f"""
+        <div style="background-color: var(--secondary-background-color); padding: 15px; border-radius: 12px; border-left: 6px solid {color}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+            <p style="color: gray; font-size: 14px; margin-bottom: 5px; font-weight: 600;">{title}</p>
+            <h2 style="color: {color}; margin-top: 0; margin-bottom: 0; font-size: 28px;">{val}</h2>
+            <p style="color: gray; font-size: 12px; margin-top: 5px;">{sub_txt}</p>
+        </div>
+        """
+
+    # 1 & 2: Calculate Avg Call Times safely
+    def get_avg_time_str(col_name):
+        if col_name in f_kpi.columns:
+            mean_td = pd.to_timedelta(f_kpi[col_name].astype(str), errors='coerce').mean()
+            if pd.notna(mean_td):
+                ts = mean_td.total_seconds()
+                return f"{int(ts // 3600):02d}:{int((ts % 3600) // 60):02d}:{int(ts % 60):02d}"
+        return "00:00:00"
+
+    avg_ob_str = get_avg_time_str('avgobcalltime')
+    avg_qa_str = get_avg_time_str('avgqacalltime')
+    
+    # 3 & 4: Calculate Sums for MoBs and Abandons
+    tot_mob = int(f_kpi['mob'].fillna(0).sum()) if 'mob' in f_kpi.columns else 0
+    tot_abandons = int(f_kpi['callabandons'].fillna(0).sum()) if 'callabandons' in f_kpi.columns else 0
+    
+    # 5: Calculate Average IA Hours and apply logic for target > 6 hours
+    avg_ia_hrs = (f_kpi['ia_min'].mean() / 60) if (not f_kpi.empty and 'ia_min' in f_kpi.columns) else 0
+    ia_color = "#22C55E" if avg_ia_hrs >= 6 else ("#F59E0B" if avg_ia_hrs >= 5 else "#EF4444")
+    
+    # Render the 5 new metric cards in the second row
+    c7.markdown(format_custom_card("Avg OB Time", avg_ob_str, "#0052FF", "Activity Metric"), unsafe_allow_html=True)
+    c8.markdown(format_custom_card("Avg QA Time", avg_qa_str, "#0052FF", "Activity Metric"), unsafe_allow_html=True)
+    c9.markdown(create_metric_card("Total MoBs", tot_mob, None, False), unsafe_allow_html=True)
+    c10.markdown(create_metric_card("Call Abandons", tot_abandons, None, False), unsafe_allow_html=True)
+    c11.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: 6.0h/day"), unsafe_allow_html=True)
+
     st.markdown("### Performance Trends")
     if not f_kpi.empty:
         trend = f_kpi.groupby('date_dt').agg(
