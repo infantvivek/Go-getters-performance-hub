@@ -16,7 +16,7 @@ LOGO_URL = "https://s3.amazonaws.com/cdn.freshdesk.com/data/helpdesk/attachments
 
 # --- GOOGLE FORM CONFIGURATION ---
 FORM_ID = "1FAIpQLSdu2gEmHPZBCoUZ1naQlGTeJtgTgB47YfCENCfeKAHU1OA76g"
-ENTRY_KEY = "entry.1726897360"       
+ENTRY_KEY = "entry.1726897360"        
 ENTRY_TYPE = "entry.1303252108"      
 ENTRY_FEEDBACK = "entry.1754509958"  
 
@@ -86,13 +86,8 @@ def load_and_standardize(url, sheet_type):
             df['call_min'] = df['call_raw'].apply(parse_duration) if 'call_raw' in df.columns else 0
             df['shift_score'] = np.where(df['ia_min'] > 0, (df['call_min']/df['ia_min']*100), np.nan)
         if sheet_type == "DSAT":
-            # Identify the correct date column
             date_col = df['date_raw'] if 'date_raw' in df.columns else df['ts_raw']
-            
-            # Add dayfirst=True so Pandas knows it is DD/MM/YYYY
             df['date_dt'] = pd.to_datetime(date_col, dayfirst=True, errors='coerce')
-            
-            # Optional: Forward-fill dates so blank "DUPLICATE" rows inherit the date from the row directly above them
             df['date_dt'] = df['date_dt'].ffill()
             
         return df
@@ -192,7 +187,9 @@ kpi_raw = load_and_standardize(KPI_URL, "KPI")
 dsat_raw = load_and_standardize(DSAT_URL, "DSAT")
 
 st.sidebar.title("Navigation Filters")
-freq = st.sidebar.radio("Frequency", ["Daily", "Weekly", "Monthly", "Yearly", "Custom"], horizontal=True)
+
+# Updated Frequency options with "Perf Cycle"
+freq = st.sidebar.radio("Frequency", ["Daily", "Weekly", "Monthly", "Yearly", "Perf Cycle", "Custom"], horizontal=True)
 
 if not kpi_raw.empty:
     if freq == "Daily":
@@ -222,23 +219,39 @@ if not kpi_raw.empty:
             else: d_f = dsat_raw[dsat_raw['date_dt'].dt.year == sel] if not dsat_raw.empty else dsat_raw.copy()
         else: k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
         
+    elif freq == "Perf Cycle":
+        # --- NEW: Yearly Performance Cycle Logic (June 1 - May 31) ---
+        def get_perf_cycle(d):
+            if pd.isna(d): return None
+            y = d.year
+            return f"{y}-{y+1} Cycle" if d.month >= 6 else f"{y-1}-{y} Cycle"
+            
+        kpi_raw['cycle'] = kpi_raw['date_dt'].apply(get_perf_cycle)
+        available = sorted(kpi_raw['cycle'].dropna().unique(), reverse=True)
+        
+        if available:
+            sel = st.sidebar.selectbox("Select Performance Cycle", available)
+            k_f = kpi_raw[kpi_raw['cycle'] == sel]
+            if not dsat_raw.empty:
+                dsat_raw['cycle'] = dsat_raw['date_dt'].apply(get_perf_cycle)
+                d_f = dsat_raw[dsat_raw['cycle'] == sel]
+            else:
+                d_f = dsat_raw.copy()
+        else: 
+            k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
+            
     elif freq == "Custom":
-        # --- EXPLICIT START & END DATE FIELDS ---
         min_date = kpi_raw['date_dt'].min().date() if not kpi_raw['date_dt'].dropna().empty else pd.to_datetime('today').date()
         max_date = kpi_raw['date_dt'].max().date() if not kpi_raw['date_dt'].dropna().empty else pd.to_datetime('today').date()
         
-        # Put them side-by-side in the sidebar to save space
         col1, col2 = st.sidebar.columns(2)
         with col1:
             start_date = st.date_input("Start Date", value=min_date, min_value=min_date, max_value=max_date)
         with col2:
-            # We set the min_value of the end date to the chosen start date to prevent backward selection
             end_date = st.date_input("End Date", value=max_date, min_value=start_date, max_value=max_date)
             
-        # Validation check
         if start_date > end_date:
             st.sidebar.error("End date cannot be before start date.")
-            # Return empty dataframes to hide data until the error is fixed
             k_f = pd.DataFrame(columns=kpi_raw.columns)
             d_f = pd.DataFrame(columns=dsat_raw.columns)
         else:
@@ -252,6 +265,7 @@ if not kpi_raw.empty:
                 d_f = dsat_raw.copy()
 else:
     k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
+
 # --- 6. HIERARCHY DRILL-DOWN ---
 access = str(user.get('level', 'IC')).strip()
 scoped_emails = []
@@ -284,21 +298,34 @@ with header_col2: st.title("The Go-Getters Performance Hub")
 
 st.success(f"Welcome **{user.get('name', 'User')}**!! | Access Level : **{access}**")
 
+# --- NEW: Dynamic Tab Injection for Scorecard ---
 tabs_list = ["📊 Performance Overview", "🚫 DSAT Analysis & Feedback"]
 if access != "IC":
     tabs_list.append("🏆 Leaderboards")
+if access == "Admin":
+    tabs_list.append("📋 Scorecard")
 tabs_list.append("📄 Detailed Report")
 
 ui_tabs = st.tabs(tabs_list)
 tab_perf = ui_tabs[0]
 tab_dsat = ui_tabs[1]
 
+# Unpack dynamically based on access level
+current_tab_idx = 2
+
 if access != "IC":
-    tab_lead = ui_tabs[2]
-    tab_report = ui_tabs[3]
+    tab_lead = ui_tabs[current_tab_idx]
+    current_tab_idx += 1
 else:
     tab_lead = None
-    tab_report = ui_tabs[2]
+
+if access == "Admin":
+    tab_scorecard = ui_tabs[current_tab_idx]
+    current_tab_idx += 1
+else:
+    tab_scorecard = None
+
+tab_report = ui_tabs[current_tab_idx]
 
 with tab_perf:
     tot_ia = f_kpi['ia_min'].sum() if not f_kpi.empty else 0
@@ -309,7 +336,10 @@ with tab_perf:
     st.info(f"In the selected timeframe, the group maintains an average Shift Score of **{avg_score:.2f}%**. Monitoring trends indicate consistent engagement during active operations.")
     
     st.markdown("### Performance Summary")
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    
+    # Restructured into 2 rows to fit the new IA hours widget nicely
+    c1, c2, c3, c4 = st.columns(4)
+    c5, c6, c7, c8 = st.columns(4)
     
     sent_rates = f_kpi['sent_rate'].dropna() if 'sent_rate' in f_kpi.columns else pd.Series([])
     avg_sent = sent_rates.mean() if not sent_rates.empty else 0
@@ -328,46 +358,19 @@ with tab_perf:
     c5.markdown(create_metric_card("Total OB Calls", tot_ob, None, False), unsafe_allow_html=True)
     c6.markdown(create_metric_card("Total QA Calls", tot_qa, None, False), unsafe_allow_html=True)
 
-    # --- NEW: ROW 2 FOR ADDITIONAL STATS ---
-    c7, c8, c9, c10, c11, c12 = st.columns(6)
-    
-    # Custom card formatter for strings/decimals (prevents breaking the global int/pct card)
-    def format_custom_card(title, val, color, sub_txt):
-        return f"""
-        <div style="background-color: var(--secondary-background-color); padding: 15px; border-radius: 12px; border-left: 6px solid {color}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
-            <p style="color: gray; font-size: 14px; margin-bottom: 5px; font-weight: 600;">{title}</p>
-            <h2 style="color: {color}; margin-top: 0; margin-bottom: 0; font-size: 28px;">{val}</h2>
-            <p style="color: gray; font-size: 12px; margin-top: 5px;">{sub_txt}</p>
-        </div>
-        """
-
-    # 1 & 2: Calculate Avg Call Times safely
-    def get_avg_time_str(col_name):
-        if col_name in f_kpi.columns:
-            mean_td = pd.to_timedelta(f_kpi[col_name].astype(str), errors='coerce').mean()
-            if pd.notna(mean_td):
-                ts = mean_td.total_seconds()
-                return f"{int(ts // 3600):02d}:{int((ts % 3600) // 60):02d}:{int(ts % 60):02d}"
-        return "00:00:00"
-
-    avg_ob_str = get_avg_time_str('avgobcalltime')
-    avg_qa_str = get_avg_time_str('avgqacalltime')
-    
-    # 3 & 4: Calculate Sums for MoBs and Abandons
-    tot_mob = int(f_kpi['mob'].fillna(0).sum()) if 'mob' in f_kpi.columns else 0
-    tot_abandons = int(f_kpi['callabandons'].fillna(0).sum()) if 'callabandons' in f_kpi.columns else 0
-    
-    # 5: Calculate Average IA Hours and apply logic for target > 6 hours
+    # --- NEW: IA HOURS WIDGET ---
     avg_ia_hrs = (f_kpi['ia_min'].mean() / 60) if (not f_kpi.empty and 'ia_min' in f_kpi.columns) else 0
     ia_color = "#22C55E" if avg_ia_hrs >= 6 else ("#F59E0B" if avg_ia_hrs >= 5 else "#EF4444")
     
-    # Render the 5 new metric cards in the second row
-    c7.markdown(format_custom_card("Avg OB Time", avg_ob_str, "#0052FF", "Activity Metric"), unsafe_allow_html=True)
-    c8.markdown(format_custom_card("Avg QA Time", avg_qa_str, "#0052FF", "Activity Metric"), unsafe_allow_html=True)
-    c9.markdown(create_metric_card("Total MoBs", tot_mob, None, False), unsafe_allow_html=True)
-    c10.markdown(create_metric_card("Call Abandons", tot_abandons, None, False), unsafe_allow_html=True)
-    c11.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: 6.0h/day"), unsafe_allow_html=True)
-
+    ia_html = f"""
+    <div style="background-color: var(--secondary-background-color); padding: 15px; border-radius: 12px; border-left: 6px solid {ia_color}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+        <p style="color: gray; font-size: 14px; margin-bottom: 5px; font-weight: 600;">Avg IA Hours</p>
+        <h2 style="color: {ia_color}; margin-top: 0; margin-bottom: 0; font-size: 28px;">{avg_ia_hrs:.1f}h</h2>
+        <p style="color: gray; font-size: 12px; margin-top: 5px;">Target: 6.0h</p>
+    </div>
+    """
+    c7.markdown(ia_html, unsafe_allow_html=True)
+    
     st.markdown("### Performance Trends")
     if not f_kpi.empty:
         trend = f_kpi.groupby('date_dt').agg(
@@ -393,9 +396,7 @@ with tab_perf:
 with tab_dsat:
     st.markdown("### DSAT Summary")
     
-    # --- FIX: ROBUST PENDING DSAT CALCULATION ---
     if 'feedback' in f_dsat.columns:
-        # Match actual NaNs, literal 'nan', empty strings, and dashes
         is_missing = f_dsat['feedback'].isna() | f_dsat['feedback'].astype(str).str.strip().str.lower().isin(['', 'nan', '-', 'none'])
         pending_count = is_missing.sum()
     else:
@@ -483,6 +484,35 @@ if tab_lead:
             with c4:
                 st.markdown("#### 🚀 OB Expert")
                 st.dataframe(ldb.sort_values('ob', ascending=False)[['name', 'ob']].rename(columns={'name': 'Advisor Name', 'ob': 'Total OB Calls'}), hide_index=True, use_container_width=True)
+
+# --- NEW: SCORECARD TAB (ADMIN ONLY) ---
+if tab_scorecard:
+    with tab_scorecard:
+        st.markdown("### 📋 Advisor Scorecard")
+        st.caption("Aggregated KPI overview for all advisors in the current filtered period.")
+        
+        if not f_kpi.empty:
+            sc_df = f_kpi.groupby('name').agg(
+                surveys=('surveys', 'sum'),
+                sent_rate=('sent_rate', lambda x: x.dropna().mean()),
+                sat_rate=('sat_rate', lambda x: x.dropna().mean()),
+                shift_score=('shift_score', lambda x: x.dropna().mean()),
+                ob=('ob', 'sum'),
+                qa=('qa', 'sum')
+            ).reset_index()
+            
+            sc_df['sent_rate'] = sc_df['sent_rate'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "-")
+            sc_df['sat_rate'] = sc_df['sat_rate'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "-")
+            sc_df['shift_score'] = sc_df['shift_score'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "-")
+            
+            sc_df = sc_df.rename(columns={
+                'name': 'Advisor Name', 'surveys': 'Total Surveys', 'sent_rate': 'Avg Sent %',
+                'sat_rate': 'Avg Sat %', 'shift_score': 'Avg Shift Score %', 'ob': 'Total OB', 'qa': 'Total QA'
+            })
+            
+            st.dataframe(sc_df, hide_index=True, use_container_width=True)
+        else:
+            st.info("No data available to generate scorecards.")
 
 with tab_report:
     st.markdown("### 📄 Detailed KPI Report")
