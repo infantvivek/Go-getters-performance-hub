@@ -20,7 +20,7 @@ ENTRY_KEY = "entry.1726897360"
 ENTRY_TYPE = "entry.1303252108"      
 ENTRY_FEEDBACK = "entry.1754509958"  
 
-st.set_page_config(layout="wide", page_title="The Go-Getters Performance Hub", page_icon="🚀")
+st.set_page_config(layout="wide", page_title="GoHighLevel Performance Hub", page_icon="🚀")
 
 # --- 2. SaaS/GHL THEME ENGINE ---
 st.markdown("""
@@ -28,7 +28,7 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     html, body, [class*="st-"] { font-family: 'Inter', sans-serif; }
     
-    :root { --ghl-blue: #0052FF; }
+    :root { --ghl-blue: #0052FF; --ghl-dark: #1E293B; }
 
     .stMetric { background-color: var(--secondary-background-color); padding: 20px; border-radius: 12px; border: 1px solid rgba(0, 82, 255, 0.1); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05); }
     
@@ -38,10 +38,11 @@ st.markdown("""
         width: 170px; height: 50px; margin: 25px 0 10px 25px; filter: brightness(0) invert(1); 
     }
     
-    .stTabs [aria-selected="true"] { background-color: var(--ghl-blue) !important; color: white !important; border-radius: 8px; }
-    div.stInfo { background-color: rgba(0, 82, 255, 0.05); border-left: 5px solid #0052FF; color: var(--text-color); border-radius: 10px; padding: 15px; }
+    .stTabs [aria-selected="true"] { background-color: var(--ghl-blue) !important; color: white !important; border-radius: 8px; font-weight: 600; }
+    div.stInfo { background-color: rgba(0, 82, 255, 0.05); border-left: 5px solid #0052FF; color: var(--text-color); border-radius: 10px; padding: 15px; font-size: 15px; }
     
     .ghl-header-img { margin-bottom: 10px; filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.1)); }
+    .tab-logo { width: 35px; vertical-align: middle; margin-right: 10px; padding-bottom: 5px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -70,7 +71,8 @@ def load_and_standardize(url, sheet_type):
             "manager": "mgr", "managername": "mgr", "accesslevel": "level", "password": "pass",
             "ia": "ia_raw", "advisorcalltime": "call_raw", "sentrate": "sent_rate", 
             "satisfiedsurvey": "sat_rate", "obcalls": "ob", "qacalls": "qa", 
-            "totalsurvey": "surveys", "timestamp": "ts_raw", "processed": "date_raw", "chatdsaturl": "link", "datelevelas": "date_raw"
+            "totalsurvey": "surveys", "timestamp": "ts_raw", "processed": "date_raw", "chatdsaturl": "link", "datelevelas": "date_raw",
+            "freshcallsmade": "fresh_calls_made", "connectedfreshcalls": "connected_fresh_calls", "unresolved": "unresolved"
         }
         df = df.rename(columns=rmap)
         if 'email' in df.columns: df['email'] = df['email'].astype(str).str.strip().str.lower()
@@ -106,13 +108,22 @@ def create_metric_card(title, value, target=None, is_percent=True):
     target_str = f"Target: {target}{'%' if is_percent else ''}" if target else "Activity Metric"
     
     html = f"""
-    <div style="background-color: var(--secondary-background-color); padding: 15px; border-radius: 12px; border-left: 6px solid {color}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
-        <p style="color: gray; font-size: 14px; margin-bottom: 5px; font-weight: 600;">{title}</p>
-        <h2 style="color: {color}; margin-top: 0; margin-bottom: 0; font-size: 28px;">{val_str}</h2>
-        <p style="color: gray; font-size: 12px; margin-top: 5px;">{target_str}</p>
+    <div style="background-color: var(--secondary-background-color); padding: 18px; border-radius: 12px; border-left: 6px solid {color}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+        <p style="color: var(--text-color); opacity: 0.8; font-size: 14px; margin-bottom: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">{title}</p>
+        <h2 style="color: {color}; margin-top: 0; margin-bottom: 0; font-size: 30px; font-weight: 700;">{val_str}</h2>
+        <p style="color: var(--text-color); opacity: 0.6; font-size: 12px; margin-top: 5px; font-weight: 500;">{target_str}</p>
     </div>
     """
     return html
+
+def format_custom_card(title, val, color, sub_txt):
+    return f"""
+    <div style="background-color: var(--secondary-background-color); padding: 18px; border-radius: 12px; border-left: 6px solid {color}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+        <p style="color: var(--text-color); opacity: 0.8; font-size: 14px; margin-bottom: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">{title}</p>
+        <h2 style="color: {color}; margin-top: 0; margin-bottom: 0; font-size: 30px; font-weight: 700;">{val}</h2>
+        <p style="color: var(--text-color); opacity: 0.6; font-size: 12px; margin-top: 5px; font-weight: 500;">{sub_txt}</p>
+    </div>
+    """
 
 @st.dialog("Update Feedback & Type", width="large")
 def open_form_dialog(row):
@@ -135,7 +146,7 @@ def open_form_dialog(row):
             st.cache_data.clear()
         st.rerun()
 
-# --- 4. AUTHENTICATION & SESSION TIMEOUT (15 MINS) ---
+# --- 4. AUTHENTICATION & SESSION TIMEOUT ---
 if 'auth' not in st.session_state: st.session_state.auth = None
 team_db = load_and_standardize(TEAM_URL, "TEAM")
 
@@ -188,7 +199,6 @@ dsat_raw = load_and_standardize(DSAT_URL, "DSAT")
 
 st.sidebar.title("Navigation Filters")
 
-# Updated Frequency options with "Perf Cycle"
 freq = st.sidebar.radio("Frequency", ["Daily", "Weekly", "Monthly", "Yearly", "Perf Cycle", "Custom"], horizontal=True)
 
 if not kpi_raw.empty:
@@ -220,7 +230,6 @@ if not kpi_raw.empty:
         else: k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
         
     elif freq == "Perf Cycle":
-        # --- NEW: Yearly Performance Cycle Logic (June 1 - May 31) ---
         def get_perf_cycle(d):
             if pd.isna(d): return None
             y = d.year
@@ -294,12 +303,11 @@ f_dsat = d_f[d_f['email'].isin(scoped_emails)]
 # --- 7. MAIN UI ---
 header_col1, header_col2 = st.columns([1, 10])
 with header_col1: st.image(LOGO_URL, width=80)
-with header_col2: st.title("The Go-Getters Performance Hub")
+with header_col2: st.title("GoHighLevel Performance Hub")
 
-st.success(f"Welcome **{user.get('name', 'User')}**!! | Access Level : **{access}**")
+st.success(f"Welcome **{user.get('name', 'User')}**! | Access Level : **{access}**")
 
-# --- NEW: Dynamic Tab Injection for Scorecard ---
-tabs_list = ["📊 Performance Overview", "🚫 DSAT Analysis & Feedback"]
+tabs_list = ["📊 Performance Overview", "🚫 DSAT Analysis"]
 if access != "IC":
     tabs_list.append("🏆 Leaderboards")
 if access == "Admin":
@@ -310,7 +318,6 @@ ui_tabs = st.tabs(tabs_list)
 tab_perf = ui_tabs[0]
 tab_dsat = ui_tabs[1]
 
-# Unpack dynamically based on access level
 current_tab_idx = 2
 
 if access != "IC":
@@ -328,24 +335,21 @@ else:
 tab_report = ui_tabs[current_tab_idx]
 
 with tab_perf:
+    st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Performance Narrative", unsafe_allow_html=True)
     tot_ia = f_kpi['ia_min'].sum() if not f_kpi.empty else 0
     tot_call = f_kpi['call_min'].sum() if not f_kpi.empty else 0
     avg_score = (tot_call / tot_ia * 100) if tot_ia > 0 else 0
     
-    st.markdown("### Performance Narrative")
     st.info(f"In the selected timeframe, the group maintains an average Shift Score of **{avg_score:.2f}%**. Monitoring trends indicate consistent engagement during active operations.")
     
-    st.markdown("### Performance Summary")
+    st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Performance Summary", unsafe_allow_html=True)
     
-    # Restructured into 2 rows to fit the new IA hours widget nicely
     c1, c2, c3, c4 = st.columns(4)
     c5, c6, c7, c8 = st.columns(4)
     
-    sent_rates = f_kpi['sent_rate'].dropna() if 'sent_rate' in f_kpi.columns else pd.Series([])
-    avg_sent = sent_rates.mean() if not sent_rates.empty else 0
-    
-    sat_rates = f_kpi['sat_rate'].dropna() if 'sat_rate' in f_kpi.columns else pd.Series([])
-    avg_sat = sat_rates.mean() if not sat_rates.empty else 0
+    # Accurate average ignoring blanks
+    avg_sent = f_kpi['sent_rate'].dropna().mean() if not f_kpi.empty and 'sent_rate' in f_kpi.columns else 0
+    avg_sat = f_kpi['sat_rate'].dropna().mean() if not f_kpi.empty and 'sat_rate' in f_kpi.columns else 0
     
     tot_surveys = int(f_kpi['surveys'].fillna(0).sum()) if not f_kpi.empty else 0
     tot_ob = int(f_kpi['ob'].fillna(0).sum()) if not f_kpi.empty else 0
@@ -358,20 +362,25 @@ with tab_perf:
     c5.markdown(create_metric_card("Total OB Calls", tot_ob, None, False), unsafe_allow_html=True)
     c6.markdown(create_metric_card("Total QA Calls", tot_qa, None, False), unsafe_allow_html=True)
 
-    # --- NEW: IA HOURS WIDGET ---
     avg_ia_hrs = (f_kpi['ia_min'].mean() / 60) if (not f_kpi.empty and 'ia_min' in f_kpi.columns) else 0
     ia_color = "#22C55E" if avg_ia_hrs >= 6 else ("#F59E0B" if avg_ia_hrs >= 5 else "#EF4444")
+    c7.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: 6.0h"), unsafe_allow_html=True)
+
+    # --- NEW: CALL ABANDONS SECTION ---
+    st.markdown("---")
+    st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Call Abandons & Fresh Calls", unsafe_allow_html=True)
+    ca1, ca2, ca3 = st.columns(3)
     
-    ia_html = f"""
-    <div style="background-color: var(--secondary-background-color); padding: 15px; border-radius: 12px; border-left: 6px solid {ia_color}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
-        <p style="color: gray; font-size: 14px; margin-bottom: 5px; font-weight: 600;">Avg IA Hours</p>
-        <h2 style="color: {ia_color}; margin-top: 0; margin-bottom: 0; font-size: 28px;">{avg_ia_hrs:.1f}h</h2>
-        <p style="color: gray; font-size: 12px; margin-top: 5px;">Target: 6.0h</p>
-    </div>
-    """
-    c7.markdown(ia_html, unsafe_allow_html=True)
+    tot_abandons = int(f_kpi['callabandons'].fillna(0).sum()) if 'callabandons' in f_kpi.columns else 0
+    tot_fresh_made = int(f_kpi['fresh_calls_made'].fillna(0).sum()) if 'fresh_calls_made' in f_kpi.columns else 0
+    tot_fresh_conn = int(f_kpi['connected_fresh_calls'].fillna(0).sum()) if 'connected_fresh_calls' in f_kpi.columns else 0
     
-    st.markdown("### Performance Trends")
+    ca1.markdown(format_custom_card("Total Call Abandons", tot_abandons, "#EF4444", "Activity Metric"), unsafe_allow_html=True)
+    ca2.markdown(format_custom_card("Fresh Calls Made", tot_fresh_made, "#0052FF", "Activity Metric"), unsafe_allow_html=True)
+    ca3.markdown(format_custom_card("Connected Fresh Calls", tot_fresh_conn, "#22C55E", "Activity Metric"), unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Performance Trends", unsafe_allow_html=True)
     if not f_kpi.empty:
         trend = f_kpi.groupby('date_dt').agg(
             sent_rate=('sent_rate', lambda x: x.dropna().mean()),
@@ -394,7 +403,7 @@ with tab_perf:
         with t5: st.plotly_chart(px.bar(trend, x='date_dt', y='qa', title="Total OH Calls"), use_container_width=True)
 
 with tab_dsat:
-    st.markdown("### DSAT Summary")
+    st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> DSAT Summary", unsafe_allow_html=True)
     
     if 'feedback' in f_dsat.columns:
         is_missing = f_dsat['feedback'].isna() | f_dsat['feedback'].astype(str).str.strip().str.lower().isin(['', 'nan', '-', 'none'])
@@ -443,6 +452,7 @@ with tab_dsat:
 
 if tab_lead:
     with tab_lead:
+        st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Success Champions", unsafe_allow_html=True)
         if not f_kpi.empty:
             ldb = f_kpi.groupby('name').agg(
                 sent_rate=('sent_rate', lambda x: x.dropna().mean()),
@@ -451,29 +461,37 @@ if tab_lead:
                 ob=('ob', 'sum')
             ).reset_index()
             
-            ldb['sent_rate'] = ldb['sent_rate'].fillna(0).round(2)
-            ldb['sat_rate'] = ldb['sat_rate'].fillna(0).round(2)
+            ldb['sent_rate'] = ldb['sent_rate'].apply(lambda x: round(x, 2) if pd.notna(x) else 0.00)
+            ldb['sat_rate'] = ldb['sat_rate'].apply(lambda x: round(x, 2) if pd.notna(x) else 0.00)
             ldb['qa'] = ldb['qa'].fillna(0)
             ldb['ob'] = ldb['ob'].fillna(0)
             
-            st.markdown("### 🏆 Success Champions")
             st.caption("Advisors maintaining an Avg Survey Sent ≥ 85.00% AND Avg Satisfied Survey ≥ 90.00%.")
             champs = ldb[(ldb['sent_rate'] >= 85) & (ldb['sat_rate'] >= 90)].sort_values('sat_rate', ascending=False)
             
-            if not champs.empty:
-                st.dataframe(champs[['name', 'sat_rate', 'sent_rate']].rename(columns={'name': 'Advisor Name', 'sat_rate': 'Satisfied %', 'sent_rate': 'Survey Sent %'}), hide_index=True, use_container_width=True)
+            # Format outputs gracefully
+            champs_fmt = champs.copy()
+            champs_fmt['sat_rate'] = champs_fmt['sat_rate'].apply(lambda x: f"{x:.2f}%")
+            champs_fmt['sent_rate'] = champs_fmt['sent_rate'].apply(lambda x: f"{x:.2f}%")
+            
+            if not champs_fmt.empty:
+                st.dataframe(champs_fmt[['name', 'sat_rate', 'sent_rate']].rename(columns={'name': 'Advisor Name', 'sat_rate': 'Satisfied %', 'sent_rate': 'Survey Sent %'}), hide_index=True, use_container_width=True)
             else:
                 st.info("No Success Champions met the criteria in this period.")
 
             st.markdown("---")
             
+            ldb_fmt = ldb.copy()
+            ldb_fmt['sent_rate'] = ldb_fmt['sent_rate'].apply(lambda x: f"{x:.2f}%")
+            ldb_fmt['sat_rate'] = ldb_fmt['sat_rate'].apply(lambda x: f"{x:.2f}%")
+            
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown("#### 📈 Survey Sent %")
-                st.dataframe(ldb.sort_values('sent_rate', ascending=False)[['name', 'sent_rate']].rename(columns={'name': 'Advisor Name', 'sent_rate': 'Survey Sent %'}), hide_index=True, use_container_width=True)
+                st.dataframe(ldb_fmt.sort_values('sent_rate', ascending=False)[['name', 'sent_rate']].rename(columns={'name': 'Advisor Name', 'sent_rate': 'Survey Sent %'}), hide_index=True, use_container_width=True)
             with c2:
                 st.markdown("#### ⭐ Satisfied Survey %")
-                st.dataframe(ldb.sort_values('sat_rate', ascending=False)[['name', 'sat_rate']].rename(columns={'name': 'Advisor Name', 'sat_rate': 'Satisfied %'}), hide_index=True, use_container_width=True)
+                st.dataframe(ldb_fmt.sort_values('sat_rate', ascending=False)[['name', 'sat_rate']].rename(columns={'name': 'Advisor Name', 'sat_rate': 'Satisfied %'}), hide_index=True, use_container_width=True)
                 
             st.markdown("---")
             
@@ -485,10 +503,9 @@ if tab_lead:
                 st.markdown("#### 🚀 OB Expert")
                 st.dataframe(ldb.sort_values('ob', ascending=False)[['name', 'ob']].rename(columns={'name': 'Advisor Name', 'ob': 'Total OB Calls'}), hide_index=True, use_container_width=True)
 
-# --- NEW: SCORECARD TAB (ADMIN ONLY) ---
 if tab_scorecard:
     with tab_scorecard:
-        st.markdown("### 📋 Advisor Scorecard")
+        st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Advisor Scorecard", unsafe_allow_html=True)
         st.caption("Aggregated KPI overview for all advisors in the current filtered period.")
         
         if not f_kpi.empty:
@@ -515,36 +532,38 @@ if tab_scorecard:
             st.info("No data available to generate scorecards.")
 
 with tab_report:
-    st.markdown("### 📄 Detailed KPI Report")
-    st.caption(f"Comprehensive view of daily metrics for the selected time range. Data is scoped by your role and filter selections.")
+    st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Detailed KPI Report", unsafe_allow_html=True)
+    st.caption("Comprehensive view of all available data points (Excluding internal identifiers).")
     
     if not f_kpi.empty:
         rep_df = pd.DataFrame()
+        
+        # Mapped directly to your updated KPI Excel Sheet 
         rep_df['Date'] = f_kpi['date_dt'].dt.strftime('%Y-%m-%d')
-        rep_df['Advisor Name'] = f_kpi['name']
-        
-        if access != "IC":
-            rep_df['Manager'] = f_kpi['mgr']
-            
+        rep_df['Agent Name'] = f_kpi['name']
         if 'shift' in f_kpi.columns: rep_df['Shift'] = f_kpi['shift']
-        rep_df['IA'] = f_kpi['ia_raw']
-        rep_df['Call Time'] = f_kpi['call_raw']
-        rep_df['Shift Score %'] = f_kpi['shift_score'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "-")
         
+        rep_df['IA'] = f_kpi['ia_raw'] if 'ia_raw' in f_kpi.columns else "-"
+        rep_df['Advisor Call Time'] = f_kpi['call_raw'] if 'call_raw' in f_kpi.columns else "-"
+        rep_df['Avg OB Call Time'] = f_kpi['avgobcalltime'].fillna("-") if 'avgobcalltime' in f_kpi.columns else "-"
+        rep_df['Avg Q/A Call Time'] = f_kpi['avgqacalltime'].fillna("-") if 'avgqacalltime' in f_kpi.columns else "-"
+        rep_df['Time Off'] = f_kpi['timeoff'].fillna("-") if 'timeoff' in f_kpi.columns else "-"
+        
+        rep_df['Call Abandons'] = f_kpi['callabandons'].fillna(0).astype(int) if 'callabandons' in f_kpi.columns else 0
+        rep_df['MOB'] = f_kpi['mob'].fillna(0).astype(int) if 'mob' in f_kpi.columns else 0
         rep_df['OB Calls'] = f_kpi['ob'].fillna(0).astype(int)
-        rep_df['QA Calls'] = f_kpi['qa'].fillna(0).astype(int)
-        if 'mob' in f_kpi.columns: rep_df['MOB'] = f_kpi['mob'].fillna(0).astype(int)
+        rep_df['Q/A Calls'] = f_kpi['qa'].fillna(0).astype(int)
+        rep_df['Tickets Created'] = f_kpi['ticketscreated'].fillna(0).astype(int) if 'ticketscreated' in f_kpi.columns else 0
         
         rep_df['Total Survey'] = f_kpi['surveys'].fillna(0).astype(int)
-        rep_df['Survey Sent %'] = f_kpi['sent_rate'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "-")
+        rep_df['Sent Rate %'] = f_kpi['sent_rate'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "-")
         rep_df['Satisfied Survey %'] = f_kpi['sat_rate'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "-")
         
-        if 'avgobcalltime' in f_kpi.columns: rep_df['Avg OB Call Time'] = f_kpi['avgobcalltime'].fillna("-")
-        if 'avgqacalltime' in f_kpi.columns: rep_df['Avg QA Call Time'] = f_kpi['avgqacalltime'].fillna("-")
-        if 'timeoff' in f_kpi.columns: rep_df['Time Off'] = f_kpi['timeoff'].fillna("-")
-        if 'callabandons' in f_kpi.columns: rep_df['Call Abandons'] = f_kpi['callabandons'].fillna(0).astype(int)
-        if 'ticketscreated' in f_kpi.columns: rep_df['Tickets Created'] = f_kpi['ticketscreated'].fillna(0).astype(int)
+        rep_df['Fresh Calls Made'] = f_kpi['fresh_calls_made'].fillna(0).astype(int) if 'fresh_calls_made' in f_kpi.columns else 0
+        rep_df['Connected Fresh Calls'] = f_kpi['connected_fresh_calls'].fillna(0).astype(int) if 'connected_fresh_calls' in f_kpi.columns else 0
+        rep_df['Un-Resolved'] = f_kpi['unresolved'].fillna(0).astype(int) if 'unresolved' in f_kpi.columns else 0
         
+        # Build Averages & Totals Bottom Row
         avg_row = {col: "" for col in rep_df.columns}
         avg_row['Date'] = "AVG & TOTALS" 
         
@@ -552,24 +571,25 @@ with tab_report:
         avg_row['IA'] = f"{int(avg_ia // 60)}h {int(avg_ia % 60)}m" if pd.notna(avg_ia) else "-"
         
         avg_call = f_kpi['call_min'].mean()
-        avg_row['Call Time'] = f"{int(avg_call // 60)}h {int(avg_call % 60)}m" if pd.notna(avg_call) else "-"
+        avg_row['Advisor Call Time'] = f"{int(avg_call // 60)}h {int(avg_call % 60)}m" if pd.notna(avg_call) else "-"
         
-        tot_ia = f_kpi['ia_min'].sum()
-        tot_call = f_kpi['call_min'].sum()
-        avg_shift = (tot_call / tot_ia * 100) if tot_ia > 0 else 0
-        avg_row['Shift Score %'] = f"{avg_shift:.2f}%"
-        
+        avg_row['Call Abandons'] = int(f_kpi['callabandons'].fillna(0).sum()) if 'callabandons' in f_kpi.columns else 0
+        avg_row['MOB'] = int(f_kpi['mob'].fillna(0).sum()) if 'mob' in f_kpi.columns else 0
         avg_row['OB Calls'] = int(f_kpi['ob'].fillna(0).sum())
-        avg_row['QA Calls'] = int(f_kpi['qa'].fillna(0).sum())
-        if 'MOB' in rep_df.columns: avg_row['MOB'] = int(f_kpi['mob'].fillna(0).sum())
+        avg_row['Q/A Calls'] = int(f_kpi['qa'].fillna(0).sum())
+        avg_row['Tickets Created'] = int(f_kpi['ticketscreated'].fillna(0).sum()) if 'ticketscreated' in f_kpi.columns else 0
         
         avg_row['Total Survey'] = int(f_kpi['surveys'].fillna(0).sum())
         
         avg_sent_val = f_kpi['sent_rate'].dropna().mean()
-        avg_row['Survey Sent %'] = f"{avg_sent_val:.2f}%" if pd.notna(avg_sent_val) else "-"
+        avg_row['Sent Rate %'] = f"{avg_sent_val:.2f}%" if pd.notna(avg_sent_val) else "-"
         
         avg_sat_val = f_kpi['sat_rate'].dropna().mean()
         avg_row['Satisfied Survey %'] = f"{avg_sat_val:.2f}%" if pd.notna(avg_sat_val) else "-"
+        
+        avg_row['Fresh Calls Made'] = int(f_kpi['fresh_calls_made'].fillna(0).sum()) if 'fresh_calls_made' in f_kpi.columns else 0
+        avg_row['Connected Fresh Calls'] = int(f_kpi['connected_fresh_calls'].fillna(0).sum()) if 'connected_fresh_calls' in f_kpi.columns else 0
+        avg_row['Un-Resolved'] = int(f_kpi['unresolved'].fillna(0).sum()) if 'unresolved' in f_kpi.columns else 0
         
         if 'Avg OB Call Time' in rep_df.columns:
             mean_td = pd.to_timedelta(f_kpi['avgobcalltime'].astype(str), errors='coerce').mean()
@@ -578,16 +598,13 @@ with tab_report:
                 avg_row['Avg OB Call Time'] = f"{int(ts // 3600):02d}:{int((ts % 3600) // 60):02d}:{int(ts % 60):02d}"
             else: avg_row['Avg OB Call Time'] = "-"
             
-        if 'Avg QA Call Time' in rep_df.columns:
+        if 'Avg Q/A Call Time' in rep_df.columns:
             mean_td = pd.to_timedelta(f_kpi['avgqacalltime'].astype(str), errors='coerce').mean()
             if pd.notna(mean_td):
                 ts = mean_td.total_seconds()
-                avg_row['Avg QA Call Time'] = f"{int(ts // 3600):02d}:{int((ts % 3600) // 60):02d}:{int(ts % 60):02d}"
-            else: avg_row['Avg QA Call Time'] = "-"
+                avg_row['Avg Q/A Call Time'] = f"{int(ts // 3600):02d}:{int((ts % 3600) // 60):02d}:{int(ts % 60):02d}"
+            else: avg_row['Avg Q/A Call Time'] = "-"
             
-        if 'Call Abandons' in rep_df.columns: avg_row['Call Abandons'] = int(f_kpi['callabandons'].fillna(0).sum())
-        if 'Tickets Created' in rep_df.columns: avg_row['Tickets Created'] = int(f_kpi['ticketscreated'].fillna(0).sum())
-        
         rep_df = pd.concat([rep_df, pd.DataFrame([avg_row])], ignore_index=True)
         
         def highlight_last_row(row):
