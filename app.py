@@ -208,10 +208,10 @@ if not kpi_raw.empty:
             sel = st.sidebar.selectbox("Select Date", available, format_func=lambda x: x.strftime('%d-%m-%Y'))
             k_f = kpi_raw[kpi_raw['date_dt'] == sel]
             d_f = dsat_raw[dsat_raw['date_dt'].dt.date == sel.date()] if not dsat_raw.empty else dsat_raw.copy()
-        else: k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
+        else: 
+            k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
         
     elif freq == "Weekly":
-       elif freq == "Weekly":
         # Check if the row is not missing (NaT) before trying to get start_time
         kpi_raw['wk'] = kpi_raw['date_dt'].dt.to_period('W-SAT').apply(lambda r: r.start_time if pd.notna(r) else pd.NaT)
         available = sorted(kpi_raw['wk'].dropna().unique(), reverse=True)
@@ -219,7 +219,8 @@ if not kpi_raw.empty:
             sel = st.sidebar.selectbox("Select Week", available, format_func=lambda x: x.strftime('%d-%m-%Y'))
             k_f = kpi_raw[kpi_raw['wk'] == sel]
             d_f = dsat_raw[(dsat_raw['date_dt'] >= sel) & (dsat_raw['date_dt'] < sel + pd.Timedelta(days=7))] if not dsat_raw.empty else dsat_raw.copy()
-        else: k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
+        else: 
+            k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
         
     elif freq in ["Monthly", "Yearly"]:
         kpi_raw['mo'] = kpi_raw['date_dt'].dt.strftime('%B %Y') if freq == "Monthly" else kpi_raw['date_dt'].dt.year
@@ -227,9 +228,12 @@ if not kpi_raw.empty:
         if len(available) > 0:
             sel = st.sidebar.selectbox(f"Select Period", available)
             k_f = kpi_raw[kpi_raw['mo'] == sel]
-            if freq == "Monthly": d_f = dsat_raw[dsat_raw['date_dt'].dt.strftime('%B %Y') == sel] if not dsat_raw.empty else dsat_raw.copy()
-            else: d_f = dsat_raw[dsat_raw['date_dt'].dt.year == sel] if not dsat_raw.empty else dsat_raw.copy()
-        else: k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
+            if freq == "Monthly": 
+                d_f = dsat_raw[dsat_raw['date_dt'].dt.strftime('%B %Y') == sel] if not dsat_raw.empty else dsat_raw.copy()
+            else: 
+                d_f = dsat_raw[dsat_raw['date_dt'].dt.year == sel] if not dsat_raw.empty else dsat_raw.copy()
+        else: 
+            k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
         
     elif freq == "Perf Cycle":
         def get_perf_cycle(d):
