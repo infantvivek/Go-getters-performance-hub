@@ -350,8 +350,9 @@ with tab_perf:
     
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Performance Summary", unsafe_allow_html=True)
     
-    c1, c2, c3, c4 = st.columns(4)
-    c5, c6, c7, c8 = st.columns(4)
+    # Restructured into 2 perfect rows of 3 to account for the removed widget
+    c1, c2, c3 = st.columns(3)
+    c4, c5, c6 = st.columns(3)
     
     # Accurate average ignoring blanks
     avg_sent = f_kpi['sent_rate'].dropna().mean() if not f_kpi.empty and 'sent_rate' in f_kpi.columns else 0
@@ -361,16 +362,21 @@ with tab_perf:
     tot_ob = int(f_kpi['ob'].fillna(0).sum()) if not f_kpi.empty else 0
     tot_qa = int(f_kpi['qa'].fillna(0).sum()) if not f_kpi.empty else 0
     
+    # Row 1
     c1.markdown(create_metric_card("Avg Survey Sent", avg_sent, 85, True), unsafe_allow_html=True)
     c2.markdown(create_metric_card("Avg Satisfied", avg_sat, 90, True), unsafe_allow_html=True)
-    c3.markdown(create_metric_card("Avg Shift Score", avg_score, 85, True), unsafe_allow_html=True)
-    c4.markdown(create_metric_card("Total Surveys", tot_surveys, None, False), unsafe_allow_html=True)
-    c5.markdown(create_metric_card("Total OB Calls", tot_ob, None, False), unsafe_allow_html=True)
-    c6.markdown(create_metric_card("Total QA Calls", tot_qa, None, False), unsafe_allow_html=True)
+    c3.markdown(create_metric_card("Total Surveys", tot_surveys, None, False), unsafe_allow_html=True)
+    
+    # Row 2
+    c4.markdown(create_metric_card("Total OB Calls", tot_ob, None, False), unsafe_allow_html=True)
+    c5.markdown(create_metric_card("Total QA Calls", tot_qa, None, False), unsafe_allow_html=True)
 
     avg_ia_hrs = (f_kpi['ia_min'].mean() / 60) if (not f_kpi.empty and 'ia_min' in f_kpi.columns) else 0
     ia_color = "#22C55E" if avg_ia_hrs >= 6 else ("#F59E0B" if avg_ia_hrs >= 5 else "#EF4444")
-    c7.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: 6.0h"), unsafe_allow_html=True)
+    c6.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: 6.0h"), unsafe_allow_html=True)
+
+    # --- NEW: CALL ABANDONS SECTION ---
+    # (The rest of your code remains exactly the same below this point)
 
     # --- NEW: CALL ABANDONS SECTION ---
     st.markdown("---")
