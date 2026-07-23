@@ -87,9 +87,26 @@ def load_and_standardize(url, sheet_type):
             df['ia_min'] = df['ia_raw'].apply(parse_duration) if 'ia_raw' in df.columns else 0
             df['call_min'] = df['call_raw'].apply(parse_duration) if 'call_raw' in df.columns else 0
             df['shift_score'] = np.where(df['ia_min'] > 0, (df['call_min']/df['ia_min']*100), np.nan)
+            
         if sheet_type == "DSAT":
-            date_col = df['date_raw'] if 'date_raw' in df.columns else df['ts_raw']
-            df['date_dt'] = pd.to_datetime(date_col, dayfirst=True, errors='coerce')
+            # Map New CSAT Sheet Fields
+            if 'createddate' in df.columns: df['date_raw'] = df['createddate']
+            if 'resolvedby' in df.columns: df['name'] = df['resolvedby']
+            
+            # Map CSAT/DSAT boolean indicator
+            if 'satisfactory' in df.columns:
+                df['is_csat'] = df['satisfactory'].astype(str).str.strip().str.lower().isin(['true', '1', 'yes', 't'])
+            else:
+                df['is_csat'] = False # Default to DSAT if missing
+                
+            # Construct Dynamic Conversation Link
+            if 'conversationid' in df.columns:
+                df['link'] = "https://highlevel-team.freshchat.com/a/309618592266199/inbox/0/254430/conversation/" + df['conversationid'].astype(str)
+            else:
+                df['link'] = "-"
+                
+            date_col = df['date_raw'] if 'date_raw' in df.columns else df['ts_raw'] if 'ts_raw' in df.columns else df.get('createddate', pd.Series())
+            df['date_dt'] = pd.to_datetime(date_col, errors='coerce')
             df['date_dt'] = df['date_dt'].ffill()
             
         return df
@@ -212,7 +229,6 @@ if not kpi_raw.empty:
             k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
         
     elif freq == "Weekly":
-        # Check if the row is not missing (NaT) before trying to get start_time
         kpi_raw['wk'] = kpi_raw['date_dt'].dt.to_period('W-SAT').apply(lambda r: r.start_time if pd.notna(r) else pd.NaT)
         available = sorted(kpi_raw['wk'].dropna().unique(), reverse=True)
         if available:
@@ -281,6 +297,10 @@ if not kpi_raw.empty:
 else:
     k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
 
+# Ensure CSAT/DSAT database maps email correctly via names so the filter functions properly
+if 'email' not in d_f.columns and 'name' in d_f.columns:
+    d_f = d_f.merge(team_db[['name', 'email']], on='name', how='left')
+
 # --- 6. HIERARCHY DRILL-DOWN ---
 access = str(user.get('level', 'IC')).strip()
 scoped_emails = []
@@ -313,7 +333,7 @@ with header_col2: st.title("GoHighLevel Performance Hub")
 
 st.success(f"Welcome **{user.get('name', 'User')}**! | Access Level : **{access}**")
 
-tabs_list = ["📊 Performance Overview", "🚫 DSAT Analysis"]
+tabs_list = ["📊 Performance Overview", "⭐ Satisfaction Survey"]
 if access != "IC":
     tabs_list.append("🏆 Leaderboards")
 if access == "Admin":
@@ -350,11 +370,9 @@ with tab_perf:
     
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Performance Summary", unsafe_allow_html=True)
     
-    # Restructured into 2 perfect rows of 3 to account for the removed widget
     c1, c2, c3 = st.columns(3)
     c4, c5, c6 = st.columns(3)
     
-    # Accurate average ignoring blanks
     avg_sent = f_kpi['sent_rate'].dropna().mean() if not f_kpi.empty and 'sent_rate' in f_kpi.columns else 0
     avg_sat = f_kpi['sat_rate'].dropna().mean() if not f_kpi.empty and 'sat_rate' in f_kpi.columns else 0
     
@@ -362,12 +380,10 @@ with tab_perf:
     tot_ob = int(f_kpi['ob'].fillna(0).sum()) if not f_kpi.empty else 0
     tot_qa = int(f_kpi['qa'].fillna(0).sum()) if not f_kpi.empty else 0
     
-    # Row 1
     c1.markdown(create_metric_card("Avg Survey Sent", avg_sent, 85, True), unsafe_allow_html=True)
     c2.markdown(create_metric_card("Avg Satisfied", avg_sat, 90, True), unsafe_allow_html=True)
     c3.markdown(create_metric_card("Total Surveys", tot_surveys, None, False), unsafe_allow_html=True)
     
-    # Row 2
     c4.markdown(create_metric_card("Total OB Calls", tot_ob, None, False), unsafe_allow_html=True)
     c5.markdown(create_metric_card("Total QA Calls", tot_qa, None, False), unsafe_allow_html=True)
 
@@ -375,10 +391,6 @@ with tab_perf:
     ia_color = "#22C55E" if avg_ia_hrs >= 6 else ("#F59E0B" if avg_ia_hrs >= 5 else "#EF4444")
     c6.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: 6.0h"), unsafe_allow_html=True)
 
-    # --- NEW: CALL ABANDONS SECTION ---
-    # (The rest of your code remains exactly the same below this point)
-
-    # --- NEW: CALL ABANDONS SECTION ---
     st.markdown("---")
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Call Abandons & Fresh Calls", unsafe_allow_html=True)
     ca1, ca2, ca3 = st.columns(3)
@@ -415,52 +427,95 @@ with tab_perf:
         with t5: st.plotly_chart(px.bar(trend, x='date_dt', y='qa', title="Total OH Calls"), use_container_width=True)
 
 with tab_dsat:
-    st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> DSAT Summary", unsafe_allow_html=True)
+    st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Satisfaction Survey Summary", unsafe_allow_html=True)
     
-    if 'feedback' in f_dsat.columns:
-        is_missing = f_dsat['feedback'].isna() | f_dsat['feedback'].astype(str).str.strip().str.lower().isin(['', 'nan', '-', 'none'])
+    # Core calculations
+    total_surveys = len(f_dsat)
+    satisfied_surveys = len(f_dsat[f_dsat['is_csat'] == True]) if 'is_csat' in f_dsat.columns else 0
+    dsat_surveys = len(f_dsat[f_dsat['is_csat'] == False]) if 'is_csat' in f_dsat.columns else total_surveys
+    csat_pct = (satisfied_surveys / total_surveys * 100) if total_surveys > 0 else 0
+    
+    dsat_df = f_dsat[f_dsat['is_csat'] == False] if 'is_csat' in f_dsat.columns else f_dsat
+    
+    if 'feedback' in dsat_df.columns:
+        is_missing = dsat_df['feedback'].isna() | dsat_df['feedback'].astype(str).str.strip().str.lower().isin(['', 'nan', '-', 'none'])
         pending_count = is_missing.sum()
     else:
-        pending_count = len(f_dsat)
+        pending_count = len(dsat_df)
+        
+    control_count = len(dsat_df[dsat_df['type'] == 'Controllable']) if 'type' in dsat_df.columns else 0
+    uncontrol_count = len(dsat_df[dsat_df['type'] == 'Uncontrollable']) if 'type' in dsat_df.columns else 0
     
-    s1, s2, s3, s4 = st.columns(4)
-    s1.metric("Total DSATs", f"{len(f_dsat)}")
-    s2.metric("Feedback Pending", f"{pending_count}")
-    s3.metric("Controllable", f"{len(f_dsat[f_dsat['type'] == 'Controllable']) if 'type' in f_dsat.columns else 0}")
-    s4.metric("Uncontrollable", f"{len(f_dsat[f_dsat['type'] == 'Uncontrollable']) if 'type' in f_dsat.columns else 0}")
+    s1, s2, s3, s4, s5, s6, s7 = st.columns(7)
+    s1.metric("Total Surveys", f"{total_surveys}")
+    s2.metric("Total Satisfied", f"{satisfied_surveys}")
+    s3.metric("Total DSATs", f"{dsat_surveys}")
+    s4.metric("Feedback Pending", f"{pending_count}")
+    s5.metric("Controllable", f"{control_count}")
+    s6.metric("Uncontrollable", f"{uncontrol_count}")
+    s7.metric("Satisfaction %", f"{csat_pct:.2f}%")
 
-    st.markdown("### DSAT Details & Feedback")
-    if not f_dsat.empty:
-        f_table = f_dsat.merge(team_db[['email', 'name', 'mgr']], on='email', how='left')
+    st.markdown("---")
+    
+    tab_pos, tab_neg = st.tabs(["👍 Positive Feedback (CSAT)", "👎 Negative Feedback (DSAT)"])
+    
+    with tab_pos:
+        st.markdown("#### Positive Customer Feedback")
+        pos_df = f_dsat[f_dsat['is_csat'] == True] if 'is_csat' in f_dsat.columns else pd.DataFrame()
         
-        headers = ["Date", "Advisor Name"]
-        col_w = [1.5, 2]
-        if access == "Admin": headers.append("Manager"); col_w.append(1.5)
-        headers.extend(["DSAT Chat Link", "Type", "Feedback"])
-        col_w.extend([2.5, 1.5, 3])
-        if access != "IC": headers.append("Action"); col_w.append(1.5)
-        
-        header_cols = st.columns(col_w)
-        for i, h in enumerate(headers): header_cols[i].write(f"**{h}**")
-        st.divider()
-        
-        for idx, row in f_table.reset_index().iterrows():
-            r = st.columns(col_w)
-            date_str = str(row['date_dt'])[:10] if pd.notna(row['date_dt']) else "-"
-            fb = row.get('feedback', '-')
-            tp = row.get('type', '-')
+        if not pos_df.empty:
+            pos_table = pos_df.copy()
+            headers = ["Date", "Advisor Name", "Customer Email", "Customer Comment"]
+            col_w = [1.5, 2, 2, 4]
             
-            c_idx = 0
-            r[c_idx].write(date_str); c_idx += 1
-            r[c_idx].write(row.get('name', '-')); c_idx += 1
-            if access == "Admin": r[c_idx].write(row.get('mgr', '-')); c_idx += 1
-            r[c_idx].markdown(f"[🔗 View Chat Context]({row.get('link', '#')})"); c_idx += 1
-            r[c_idx].write(tp if str(tp) != 'nan' and tp != "" else "-"); c_idx += 1
-            r[c_idx].write(fb if str(fb) != 'nan' and fb != "" else "-"); c_idx += 1
+            header_cols = st.columns(col_w)
+            for i, h in enumerate(headers): header_cols[i].write(f"**{h}**")
+            st.divider()
             
-            if access != "IC":
-                if r[c_idx].button("📝 Update", key=f"upd_{idx}"):
-                    open_form_dialog(row)
+            for idx, row in pos_table.reset_index().iterrows():
+                r = st.columns(col_w)
+                date_str = str(row['date_dt'])[:10] if pd.notna(row['date_dt']) else "-"
+                
+                r[0].write(date_str)
+                r[1].write(row.get('name', '-'))
+                r[2].write(row.get('customeremail', '-'))
+                r[3].write(row.get('customercomments', '-'))
+        else:
+            st.info("No positive feedback available for the selected period.")
+            
+    with tab_neg:
+        st.markdown("#### DSAT Details & Action Plan")
+        if not dsat_df.empty:
+            neg_table = dsat_df.copy()
+            
+            headers = ["Date", "Advisor Name", "Customer Email", "Customer Comment", "Chat Link", "Type", "Feedback"]
+            col_w = [1.2, 1.5, 2, 3, 1.2, 1, 2]
+            if access != "IC": headers.append("Action"); col_w.append(1)
+            
+            header_cols = st.columns(col_w)
+            for i, h in enumerate(headers): header_cols[i].write(f"**{h}**")
+            st.divider()
+            
+            for idx, row in neg_table.reset_index().iterrows():
+                r = st.columns(col_w)
+                date_str = str(row['date_dt'])[:10] if pd.notna(row['date_dt']) else "-"
+                fb = row.get('feedback', '-')
+                tp = row.get('type', '-')
+                
+                c_idx = 0
+                r[c_idx].write(date_str); c_idx += 1
+                r[c_idx].write(row.get('name', '-')); c_idx += 1
+                r[c_idx].write(row.get('customeremail', '-')); c_idx += 1
+                r[c_idx].write(row.get('customercomments', '-')); c_idx += 1
+                r[c_idx].markdown(f"[🔗 View Chat]({row.get('link', '#')})"); c_idx += 1
+                r[c_idx].write(tp if str(tp) != 'nan' and tp != "" else "-"); c_idx += 1
+                r[c_idx].write(fb if str(fb) != 'nan' and fb != "" else "-"); c_idx += 1
+                
+                if access != "IC":
+                    if r[c_idx].button("📝 Update", key=f"upd_{idx}"):
+                        open_form_dialog(row)
+        else:
+            st.info("No DSATs recorded for the selected period.")
 
 if tab_lead:
     with tab_lead:
@@ -481,7 +536,6 @@ if tab_lead:
             st.caption("Advisors maintaining an Avg Survey Sent ≥ 85.00% AND Avg Satisfied Survey ≥ 90.00%.")
             champs = ldb[(ldb['sent_rate'] >= 85) & (ldb['sat_rate'] >= 90)].sort_values('sat_rate', ascending=False)
             
-            # Format outputs gracefully
             champs_fmt = champs.copy()
             champs_fmt['sat_rate'] = champs_fmt['sat_rate'].apply(lambda x: f"{x:.2f}%")
             champs_fmt['sent_rate'] = champs_fmt['sent_rate'].apply(lambda x: f"{x:.2f}%")
@@ -550,7 +604,6 @@ with tab_report:
     if not f_kpi.empty:
         rep_df = pd.DataFrame()
         
-        # Mapped directly to your updated KPI Excel Sheet 
         rep_df['Date'] = f_kpi['date_dt'].dt.strftime('%Y-%m-%d')
         rep_df['Agent Name'] = f_kpi['name']
         if 'shift' in f_kpi.columns: rep_df['Shift'] = f_kpi['shift']
@@ -575,7 +628,6 @@ with tab_report:
         rep_df['Connected Fresh Calls'] = f_kpi['connected_fresh_calls'].fillna(0).astype(int) if 'connected_fresh_calls' in f_kpi.columns else 0
         rep_df['Un-Resolved'] = f_kpi['unresolved'].fillna(0).astype(int) if 'unresolved' in f_kpi.columns else 0
         
-        # Build Averages & Totals Bottom Row
         avg_row = {col: "" for col in rep_df.columns}
         avg_row['Date'] = "AVG & TOTALS" 
         
