@@ -106,7 +106,7 @@ def load_and_standardize(url, sheet_type):
                 
             # Construct Dynamic Conversation Link
             if 'conversationid' in df.columns:
-                df['link'] = "https://highlevel-team.freshchat.com/a/309618592266199/inbox/0/0/conversation/" + df['conversationid'}
+                df['link'] = "https://highlevel-team.freshchat.com/a/309618592266199/inbox/0/0/conversation/" + df['conversationid']
             else:
                 df['link'] = "-"
                 
