@@ -297,10 +297,16 @@ if not kpi_raw.empty:
 else:
     k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
 
-# Ensure CSAT/DSAT database maps email correctly via names so the filter functions properly
-if 'email' not in d_f.columns and 'name' in d_f.columns:
-    d_f = d_f.merge(team_db[['name', 'email']], on='name', how='left')
+# Ensure databases map email correctly so the filter functions properly
+if 'email' not in d_f.columns:
+    if 'name' in d_f.columns:
+        d_f = d_f.merge(team_db.dropna(subset=['name', 'email'])[['name', 'email']], on='name', how='left')
+    # Absolute fallback to prevent KeyError if merge returns empty or name doesn't exist
+    if 'email' not in d_f.columns: 
+        d_f['email'] = ""
 
+if 'email' not in k_f.columns:
+    k_f['email'] = ""
 # --- 6. HIERARCHY DRILL-DOWN ---
 access = str(user.get('level', 'IC')).strip()
 scoped_emails = []
