@@ -382,22 +382,19 @@ else:
 tab_report = ui_tabs[current_tab_idx]
 
 with tab_perf:
-    st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Performance Narrative", unsafe_allow_html=True)
-    tot_ia = f_kpi['ia_min'].sum() if not f_kpi.empty else 0
-    tot_call = f_kpi['call_min'].sum() if not f_kpi.empty else 0
-    avg_score = (tot_call / tot_ia * 100) if tot_ia > 0 else 0
-    
-    st.info(f"In the selected timeframe, the group maintains an average Shift Score of **{avg_score:.2f}%**. Monitoring trends indicate consistent engagement during active operations.")
-    
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Performance Summary", unsafe_allow_html=True)
     
     c1, c2, c3 = st.columns(3)
     c4, c5, c6 = st.columns(3)
     
     avg_sent = f_kpi['sent_rate'].dropna().mean() if not f_kpi.empty and 'sent_rate' in f_kpi.columns else 0
-    avg_sat = f_kpi['sat_rate'].dropna().mean() if not f_kpi.empty and 'sat_rate' in f_kpi.columns else 0
     
-    tot_surveys = int(f_kpi['surveys'].fillna(0).sum()) if not f_kpi.empty else 0
+    # --- UPDATED: True Aggregate Calculation directly from CSAT Data ---
+    tot_surveys = len(f_dsat)
+    tot_satisfied = len(f_dsat[f_dsat['is_csat'] == True]) if 'is_csat' in f_dsat.columns else 0
+    avg_sat = (tot_satisfied / tot_surveys * 100) if tot_surveys > 0 else 0
+    # -------------------------------------------------------------------
+    
     tot_ob = int(f_kpi['ob'].fillna(0).sum()) if not f_kpi.empty else 0
     tot_qa = int(f_kpi['qa'].fillna(0).sum()) if not f_kpi.empty else 0
     
