@@ -104,9 +104,18 @@ def load_and_standardize(url, sheet_type):
             else:
                 df['is_csat'] = False # Default to DSAT if missing
                 
-            # Construct Dynamic Conversation Link
+            # Construct Dynamic Conversation Link robustly (strip decimals/scientific formats)
             if 'conversationid' in df.columns:
-                df['link'] = "https://highlevel-team.freshchat.com/a/309618592266199/inbox/0/0/conversation/" + df['conversationid']
+                def clean_id(x):
+                    x_str = str(x).strip()
+                    if pd.isna(x) or x_str.lower() in ['nan', 'null', '']: return "-"
+                    try:
+                        return str(int(float(x))) # Convert float to int to remove .0
+                    except:
+                        return x_str
+                
+                cleaned_ids = df['conversationid'].apply(clean_id)
+                df['link'] = np.where(cleaned_ids == "-", "-", "https://highlevel-team.freshchat.com/a/309618592266199/inbox/0/254430/conversation/" + cleaned_ids)
             else:
                 df['link'] = "-"
                 
@@ -480,8 +489,8 @@ with tab_dsat:
         
         if not pos_df.empty:
             pos_table = pos_df.copy()
-            headers = ["Date", "Advisor Name", "Customer Email", "Customer Comment"]
-            col_w = [1.5, 2, 2, 4]
+            headers = ["Date", "Advisor Name", "Customer Email", "Customer Comment", "Chat Link"]
+            col_w = [1.2, 1.5, 2, 3, 1.2]
             
             header_cols = st.columns(col_w)
             for i, h in enumerate(headers): header_cols[i].write(f"**{h}**")
@@ -495,9 +504,14 @@ with tab_dsat:
                 r[1].write(row.get('name', '-'))
                 r[2].write(row.get('customeremail', '-'))
                 
-                # Check for "null" string in comments from export
                 cmt = str(row.get('customercomments', '-'))
-                r[3].write("-" if cmt.lower() == 'null' else cmt)
+                r[3].write("-" if cmt.lower() in ['null', 'nan', ''] else cmt)
+                
+                link_val = row.get('link', '-')
+                if link_val != "-":
+                    r[4].markdown(f"[🔗 View Chat]({link_val})")
+                else:
+                    r[4].write("-")
         else:
             st.info("No positive feedback available for the selected period.")
             
@@ -527,12 +541,20 @@ with tab_dsat:
                 cmt = str(row.get('customercomments', '-'))
                 cmt = "-" if cmt.lower() in ['nan', 'null', ''] else cmt
                 
+                link_val = row.get('link', '-')
+                
                 c_idx = 0
                 r[c_idx].write(date_str); c_idx += 1
                 r[c_idx].write(row.get('name', '-')); c_idx += 1
                 r[c_idx].write(row.get('customeremail', '-')); c_idx += 1
                 r[c_idx].write(cmt); c_idx += 1
-                r[c_idx].markdown(f"[🔗 View Chat]({row.get('link', '#')})"); c_idx += 1
+                
+                if link_val != "-":
+                    r[c_idx].markdown(f"[🔗 View Chat]({link_val})")
+                else:
+                    r[c_idx].write("-")
+                c_idx += 1
+                
                 r[c_idx].write(tp); c_idx += 1
                 r[c_idx].write(fb); c_idx += 1
                 
