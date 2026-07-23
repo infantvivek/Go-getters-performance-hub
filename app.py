@@ -578,7 +578,9 @@ if tab_lead:
             ldb['ob'] = ldb['ob'].fillna(0)
             
             st.caption("Advisors maintaining an Avg Survey Sent ≥ 85.00% AND Avg Satisfied Survey ≥ 90.00%.")
-            champs = ldb[(ldb['sent_rate'] >= 85) & (ldb['sat_rate'] >= 90)].sort_values('sat_rate', ascending=False)
+            
+            # Sorted numerically by sat_rate then sent_rate
+            champs = ldb[(ldb['sent_rate'] >= 85) & (ldb['sat_rate'] >= 90)].sort_values(['sat_rate', 'sent_rate'], ascending=[False, False])
             
             champs_fmt = champs.copy()
             champs_fmt['sat_rate'] = champs_fmt['sat_rate'].apply(lambda x: f"{x:.2f}%")
@@ -591,17 +593,20 @@ if tab_lead:
 
             st.markdown("---")
             
-            ldb_fmt = ldb.copy()
-            ldb_fmt['sent_rate'] = ldb_fmt['sent_rate'].apply(lambda x: f"{x:.2f}%")
-            ldb_fmt['sat_rate'] = ldb_fmt['sat_rate'].apply(lambda x: f"{x:.2f}%")
-            
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown("#### 📈 Survey Sent %")
-                st.dataframe(ldb_fmt.sort_values('sent_rate', ascending=False)[['name', 'sent_rate']].rename(columns={'name': 'Advisor Name', 'sent_rate': 'Survey Sent %'}), hide_index=True, use_container_width=True)
+                # Sort numerically FIRST, then format as string
+                df_sent = ldb.sort_values('sent_rate', ascending=False)[['name', 'sent_rate']]
+                df_sent['sent_rate'] = df_sent['sent_rate'].apply(lambda x: f"{x:.2f}%")
+                st.dataframe(df_sent.rename(columns={'name': 'Advisor Name', 'sent_rate': 'Survey Sent %'}), hide_index=True, use_container_width=True)
+                
             with c2:
                 st.markdown("#### ⭐ Satisfied Survey %")
-                st.dataframe(ldb_fmt.sort_values('sat_rate', ascending=False)[['name', 'sat_rate']].rename(columns={'name': 'Advisor Name', 'sat_rate': 'Satisfied %'}), hide_index=True, use_container_width=True)
+                # Sort numerically FIRST, then format as string
+                df_sat = ldb.sort_values('sat_rate', ascending=False)[['name', 'sat_rate']]
+                df_sat['sat_rate'] = df_sat['sat_rate'].apply(lambda x: f"{x:.2f}%")
+                st.dataframe(df_sat.rename(columns={'name': 'Advisor Name', 'sat_rate': 'Satisfied %'}), hide_index=True, use_container_width=True)
                 
             st.markdown("---")
             
@@ -612,7 +617,6 @@ if tab_lead:
             with c4:
                 st.markdown("#### 🚀 OB Expert")
                 st.dataframe(ldb.sort_values('ob', ascending=False)[['name', 'ob']].rename(columns={'name': 'Advisor Name', 'ob': 'Total OB Calls'}), hide_index=True, use_container_width=True)
-
 if tab_scorecard:
     with tab_scorecard:
         st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Advisor Scorecard", unsafe_allow_html=True)
