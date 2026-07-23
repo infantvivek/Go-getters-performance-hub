@@ -91,7 +91,12 @@ def load_and_standardize(url, sheet_type):
         if sheet_type == "DSAT":
             # Map New CSAT Sheet Fields
             if 'createddate' in df.columns: df['date_raw'] = df['createddate']
-            if 'resolvedby' in df.columns: df['name'] = df['resolvedby']
+            
+            # Map the exact naming convention from the new CSAT sheet
+            if 'resolvedbyteammember' in df.columns: 
+                df['name'] = df['resolvedbyteammember']
+            elif 'resolvedby' in df.columns: 
+                df['name'] = df['resolvedby']
             
             # Map CSAT/DSAT boolean indicator
             if 'satisfactory' in df.columns:
@@ -307,6 +312,7 @@ if 'email' not in d_f.columns:
 
 if 'email' not in k_f.columns:
     k_f['email'] = ""
+
 # --- 6. HIERARCHY DRILL-DOWN ---
 access = str(user.get('level', 'IC')).strip()
 scoped_emails = []
@@ -444,7 +450,7 @@ with tab_dsat:
     dsat_df = f_dsat[f_dsat['is_csat'] == False] if 'is_csat' in f_dsat.columns else f_dsat
     
     if 'feedback' in dsat_df.columns:
-        is_missing = dsat_df['feedback'].isna() | dsat_df['feedback'].astype(str).str.strip().str.lower().isin(['', 'nan', '-', 'none'])
+        is_missing = dsat_df['feedback'].isna() | dsat_df['feedback'].astype(str).str.strip().str.lower().isin(['', 'nan', '-', 'none', 'null'])
         pending_count = is_missing.sum()
     else:
         pending_count = len(dsat_df)
@@ -452,14 +458,17 @@ with tab_dsat:
     control_count = len(dsat_df[dsat_df['type'] == 'Controllable']) if 'type' in dsat_df.columns else 0
     uncontrol_count = len(dsat_df[dsat_df['type'] == 'Uncontrollable']) if 'type' in dsat_df.columns else 0
     
-    s1, s2, s3, s4, s5, s6, s7 = st.columns(7)
-    s1.metric("Total Surveys", f"{total_surveys}")
-    s2.metric("Total Satisfied", f"{satisfied_surveys}")
-    s3.metric("Total DSATs", f"{dsat_surveys}")
-    s4.metric("Feedback Pending", f"{pending_count}")
-    s5.metric("Controllable", f"{control_count}")
-    s6.metric("Uncontrollable", f"{uncontrol_count}")
-    s7.metric("Satisfaction %", f"{csat_pct:.2f}%")
+    # Styled Custom Cards matching the Performance Tab
+    s1, s2, s3, s4 = st.columns(4)
+    s1.markdown(format_custom_card("Total Surveys", total_surveys, "#0052FF", "Overall Volume"), unsafe_allow_html=True)
+    s2.markdown(format_custom_card("Total Satisfied", satisfied_surveys, "#22C55E", "CSAT Count"), unsafe_allow_html=True)
+    s3.markdown(format_custom_card("Total DSATs", dsat_surveys, "#EF4444", "Negative Count"), unsafe_allow_html=True)
+    s4.markdown(format_custom_card("Satisfaction %", f"{csat_pct:.2f}%", "#22C55E" if csat_pct >= 90 else "#F59E0B", "Target: 90%"), unsafe_allow_html=True)
+
+    s5, s6, s7 = st.columns(3)
+    s5.markdown(format_custom_card("Feedback Pending", pending_count, "#F59E0B" if pending_count > 0 else "#22C55E", "Action Required"), unsafe_allow_html=True)
+    s6.markdown(format_custom_card("Controllable", control_count, "#8B5CF6", "DSAT Type"), unsafe_allow_html=True)
+    s7.markdown(format_custom_card("Uncontrollable", uncontrol_count, "#64748B", "DSAT Type"), unsafe_allow_html=True)
 
     st.markdown("---")
     
@@ -485,7 +494,10 @@ with tab_dsat:
                 r[0].write(date_str)
                 r[1].write(row.get('name', '-'))
                 r[2].write(row.get('customeremail', '-'))
-                r[3].write(row.get('customercomments', '-'))
+                
+                # Check for "null" string in comments from export
+                cmt = str(row.get('customercomments', '-'))
+                r[3].write("-" if cmt.lower() == 'null' else cmt)
         else:
             st.info("No positive feedback available for the selected period.")
             
@@ -505,17 +517,24 @@ with tab_dsat:
             for idx, row in neg_table.reset_index().iterrows():
                 r = st.columns(col_w)
                 date_str = str(row['date_dt'])[:10] if pd.notna(row['date_dt']) else "-"
-                fb = row.get('feedback', '-')
-                tp = row.get('type', '-')
+                
+                fb = str(row.get('feedback', '-'))
+                fb = "-" if fb.lower() in ['nan', 'null', ''] else fb
+                
+                tp = str(row.get('type', '-'))
+                tp = "-" if tp.lower() in ['nan', 'null', ''] else tp
+                
+                cmt = str(row.get('customercomments', '-'))
+                cmt = "-" if cmt.lower() in ['nan', 'null', ''] else cmt
                 
                 c_idx = 0
                 r[c_idx].write(date_str); c_idx += 1
                 r[c_idx].write(row.get('name', '-')); c_idx += 1
                 r[c_idx].write(row.get('customeremail', '-')); c_idx += 1
-                r[c_idx].write(row.get('customercomments', '-')); c_idx += 1
+                r[c_idx].write(cmt); c_idx += 1
                 r[c_idx].markdown(f"[🔗 View Chat]({row.get('link', '#')})"); c_idx += 1
-                r[c_idx].write(tp if str(tp) != 'nan' and tp != "" else "-"); c_idx += 1
-                r[c_idx].write(fb if str(fb) != 'nan' and fb != "" else "-"); c_idx += 1
+                r[c_idx].write(tp); c_idx += 1
+                r[c_idx].write(fb); c_idx += 1
                 
                 if access != "IC":
                     if r[c_idx].button("📝 Update", key=f"upd_{idx}"):
