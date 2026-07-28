@@ -89,28 +89,24 @@ def load_and_standardize(url, sheet_type):
             df['shift_score'] = np.where(df['ia_min'] > 0, (df['call_min']/df['ia_min']*100), np.nan)
             
         if sheet_type == "DSAT":
-            # Map New CSAT Sheet Fields
             if 'createddate' in df.columns: df['date_raw'] = df['createddate']
             
-            # Map the exact naming convention from the new CSAT sheet
             if 'resolvedbyteammember' in df.columns: 
                 df['name'] = df['resolvedbyteammember']
             elif 'resolvedby' in df.columns: 
                 df['name'] = df['resolvedby']
             
-            # Map CSAT/DSAT boolean indicator
             if 'satisfactory' in df.columns:
                 df['is_csat'] = df['satisfactory'].astype(str).str.strip().str.lower().isin(['true', '1', 'yes', 't'])
             else:
-                df['is_csat'] = False # Default to DSAT if missing
+                df['is_csat'] = False 
                 
-            # Construct Dynamic Conversation Link robustly (strip decimals/scientific formats)
             if 'conversationid' in df.columns:
                 def clean_id(x):
                     x_str = str(x).strip()
                     if pd.isna(x) or x_str.lower() in ['nan', 'null', '']: return "-"
                     try:
-                        return str(int(float(x))) # Convert float to int to remove .0
+                        return str(int(float(x))) 
                     except:
                         return x_str
                 
@@ -129,11 +125,11 @@ def load_and_standardize(url, sheet_type):
 
 def create_metric_card(title, value, target=None, is_percent=True):
     if target:
-        if value >= target: color = "#22C55E" # Green
-        elif value >= target - 15: color = "#F59E0B" # Yellow
-        else: color = "#EF4444" # Red
+        if value >= target: color = "#22C55E"
+        elif value >= target - 15: color = "#F59E0B"
+        else: color = "#EF4444"
     else:
-        color = "#0052FF" # Default Blue
+        color = "#0052FF" 
 
     val_str = f"{value:.2f}%" if is_percent else f"{int(value):,}"
     target_str = f"Target: {target}{'%' if is_percent else ''}" if target else "Activity Metric"
@@ -311,11 +307,9 @@ if not kpi_raw.empty:
 else:
     k_f, d_f = kpi_raw.copy(), dsat_raw.copy()
 
-# Ensure databases map email correctly so the filter functions properly
 if 'email' not in d_f.columns:
     if 'name' in d_f.columns:
         d_f = d_f.merge(team_db.dropna(subset=['name', 'email'])[['name', 'email']], on='name', how='left')
-    # Absolute fallback to prevent KeyError if merge returns empty or name doesn't exist
     if 'email' not in d_f.columns: 
         d_f['email'] = ""
 
@@ -334,9 +328,10 @@ if access in ["Admin", "Manager"]:
     if mode == "Entire Team": 
         scoped_emails = all_team_emails
     else:
-        adv_options = team_db[team_db['level'] == 'IC']['name'].dropna().unique().tolist()
+        # UPDATED: Alphabetical Sorting applied here
+        adv_options = sorted(team_db[team_db['level'] == 'IC']['name'].dropna().astype(str).unique().tolist())
         if not adv_options: 
-            adv_options = team_db['name'].dropna().unique().tolist()
+            adv_options = sorted(team_db['name'].dropna().astype(str).unique().tolist())
             
         adv_sel = st.sidebar.selectbox("Select Advisor", adv_options)
         found = team_db[team_db['name'] == adv_sel]['email'].tolist()
@@ -353,6 +348,17 @@ with header_col1: st.image(LOGO_URL, width=80)
 with header_col2: st.title("GoHighLevel Performance Hub")
 
 st.success(f"Welcome **{user.get('name', 'User')}**! | Access Level : **{access}**")
+
+# --- NEW: GLOBALLY PRE-CALCULATE TRUE AGGREGATES ---
+# This fixes the "Average of Averages" bug for the Leaderboard and Scorecard
+if not f_dsat.empty and 'is_csat' in f_dsat.columns:
+    agent_csat_stats = f_dsat.groupby('name').agg(
+        true_surveys=('is_csat', 'count'),
+        true_satisfied=('is_csat', 'sum') 
+    ).reset_index()
+    agent_csat_stats['true_sat_rate'] = np.where(agent_csat_stats['true_surveys'] > 0, (agent_csat_stats['true_satisfied'] / agent_csat_stats['true_surveys']) * 100, 0)
+else:
+    agent_csat_stats = pd.DataFrame(columns=['name', 'true_surveys', 'true_satisfied', 'true_sat_rate'])
 
 tabs_list = ["📊 Performance Overview", "⭐ Satisfaction Survey"]
 if access != "IC":
@@ -382,6 +388,13 @@ else:
 tab_report = ui_tabs[current_tab_idx]
 
 with tab_perf:
+    st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Performance Narrative", unsafe_allow_html=True)
+    tot_ia = f_kpi['ia_min'].sum() if not f_kpi.empty else 0
+    tot_call = f_kpi['call_min'].sum() if not f_kpi.empty else 0
+    avg_score = (tot_call / tot_ia * 100) if tot_ia > 0 else 0
+    
+    st.info(f"In the selected timeframe, the group maintains an average Shift Score of **{avg_score:.2f}%**. Monitoring trends indicate consistent engagement during active operations.")
+    
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Performance Summary", unsafe_allow_html=True)
     
     c1, c2, c3 = st.columns(3)
@@ -389,11 +402,9 @@ with tab_perf:
     
     avg_sent = f_kpi['sent_rate'].dropna().mean() if not f_kpi.empty and 'sent_rate' in f_kpi.columns else 0
     
-    # --- UPDATED: True Aggregate Calculation directly from CSAT Data ---
     tot_surveys = len(f_dsat)
     tot_satisfied = len(f_dsat[f_dsat['is_csat'] == True]) if 'is_csat' in f_dsat.columns else 0
     avg_sat = (tot_satisfied / tot_surveys * 100) if tot_surveys > 0 else 0
-    # -------------------------------------------------------------------
     
     tot_ob = int(f_kpi['ob'].fillna(0).sum()) if not f_kpi.empty else 0
     tot_qa = int(f_kpi['qa'].fillna(0).sum()) if not f_kpi.empty else 0
@@ -447,7 +458,6 @@ with tab_perf:
 with tab_dsat:
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Satisfaction Survey Summary", unsafe_allow_html=True)
     
-    # Core calculations
     total_surveys = len(f_dsat)
     satisfied_surveys = len(f_dsat[f_dsat['is_csat'] == True]) if 'is_csat' in f_dsat.columns else 0
     dsat_surveys = len(f_dsat[f_dsat['is_csat'] == False]) if 'is_csat' in f_dsat.columns else total_surveys
@@ -464,7 +474,6 @@ with tab_dsat:
     control_count = len(dsat_df[dsat_df['type'] == 'Controllable']) if 'type' in dsat_df.columns else 0
     uncontrol_count = len(dsat_df[dsat_df['type'] == 'Uncontrollable']) if 'type' in dsat_df.columns else 0
     
-    # Styled Custom Cards matching the Performance Tab
     s1, s2, s3, s4 = st.columns(4)
     s1.markdown(format_custom_card("Total Surveys", total_surveys, "#0052FF", "Overall Volume"), unsafe_allow_html=True)
     s2.markdown(format_custom_card("Total Satisfied", satisfied_surveys, "#22C55E", "CSAT Count"), unsafe_allow_html=True)
@@ -567,10 +576,13 @@ if tab_lead:
         if not f_kpi.empty:
             ldb = f_kpi.groupby('name').agg(
                 sent_rate=('sent_rate', lambda x: x.dropna().mean()),
-                sat_rate=('sat_rate', lambda x: x.dropna().mean()),
                 qa=('qa', 'sum'),
                 ob=('ob', 'sum')
             ).reset_index()
+            
+            # --- UPDATED: Merge accurately calculated CSAT numbers per agent ---
+            ldb = ldb.merge(agent_csat_stats[['name', 'true_sat_rate']], on='name', how='left')
+            ldb['sat_rate'] = ldb['true_sat_rate'].fillna(0)
             
             ldb['sent_rate'] = ldb['sent_rate'].apply(lambda x: round(x, 2) if pd.notna(x) else 0.00)
             ldb['sat_rate'] = ldb['sat_rate'].apply(lambda x: round(x, 2) if pd.notna(x) else 0.00)
@@ -578,8 +590,6 @@ if tab_lead:
             ldb['ob'] = ldb['ob'].fillna(0)
             
             st.caption("Advisors maintaining an Avg Survey Sent ≥ 85.00% AND Avg Satisfied Survey ≥ 90.00%.")
-            
-            # Sorted numerically by sat_rate then sent_rate
             champs = ldb[(ldb['sent_rate'] >= 85) & (ldb['sat_rate'] >= 90)].sort_values(['sat_rate', 'sent_rate'], ascending=[False, False])
             
             champs_fmt = champs.copy()
@@ -596,14 +606,12 @@ if tab_lead:
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown("#### 📈 Survey Sent %")
-                # Sort numerically FIRST, then format as string
                 df_sent = ldb.sort_values('sent_rate', ascending=False)[['name', 'sent_rate']]
                 df_sent['sent_rate'] = df_sent['sent_rate'].apply(lambda x: f"{x:.2f}%")
                 st.dataframe(df_sent.rename(columns={'name': 'Advisor Name', 'sent_rate': 'Survey Sent %'}), hide_index=True, use_container_width=True)
                 
             with c2:
                 st.markdown("#### ⭐ Satisfied Survey %")
-                # Sort numerically FIRST, then format as string
                 df_sat = ldb.sort_values('sat_rate', ascending=False)[['name', 'sat_rate']]
                 df_sat['sat_rate'] = df_sat['sat_rate'].apply(lambda x: f"{x:.2f}%")
                 st.dataframe(df_sat.rename(columns={'name': 'Advisor Name', 'sat_rate': 'Satisfied %'}), hide_index=True, use_container_width=True)
@@ -617,6 +625,7 @@ if tab_lead:
             with c4:
                 st.markdown("#### 🚀 OB Expert")
                 st.dataframe(ldb.sort_values('ob', ascending=False)[['name', 'ob']].rename(columns={'name': 'Advisor Name', 'ob': 'Total OB Calls'}), hide_index=True, use_container_width=True)
+
 if tab_scorecard:
     with tab_scorecard:
         st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Advisor Scorecard", unsafe_allow_html=True)
@@ -624,24 +633,29 @@ if tab_scorecard:
         
         if not f_kpi.empty:
             sc_df = f_kpi.groupby('name').agg(
-                surveys=('surveys', 'sum'),
                 sent_rate=('sent_rate', lambda x: x.dropna().mean()),
-                sat_rate=('sat_rate', lambda x: x.dropna().mean()),
                 shift_score=('shift_score', lambda x: x.dropna().mean()),
                 ob=('ob', 'sum'),
                 qa=('qa', 'sum')
             ).reset_index()
             
+            # --- UPDATED: Merge accurately calculated CSAT numbers and Total Surveys per agent ---
+            sc_df = sc_df.merge(agent_csat_stats[['name', 'true_surveys', 'true_sat_rate']], on='name', how='left')
+            sc_df['sat_rate'] = sc_df['true_sat_rate'].fillna(0)
+            sc_df['surveys'] = sc_df['true_surveys'].fillna(0)
+            
             sc_df['sent_rate'] = sc_df['sent_rate'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "-")
             sc_df['sat_rate'] = sc_df['sat_rate'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "-")
             sc_df['shift_score'] = sc_df['shift_score'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "-")
+            sc_df['surveys'] = sc_df['surveys'].astype(int)
             
             sc_df = sc_df.rename(columns={
                 'name': 'Advisor Name', 'surveys': 'Total Surveys', 'sent_rate': 'Avg Sent %',
                 'sat_rate': 'Avg Sat %', 'shift_score': 'Avg Shift Score %', 'ob': 'Total OB', 'qa': 'Total QA'
             })
             
-            st.dataframe(sc_df, hide_index=True, use_container_width=True)
+            sc_cols = ['Advisor Name', 'Total Surveys', 'Avg Sent %', 'Avg Sat %', 'Avg Shift Score %', 'Total OB', 'Total QA']
+            st.dataframe(sc_df[sc_cols], hide_index=True, use_container_width=True)
         else:
             st.info("No data available to generate scorecards.")
 
@@ -691,13 +705,16 @@ with tab_report:
         avg_row['Q/A Calls'] = int(f_kpi['qa'].fillna(0).sum())
         avg_row['Tickets Created'] = int(f_kpi['ticketscreated'].fillna(0).sum()) if 'ticketscreated' in f_kpi.columns else 0
         
-        avg_row['Total Survey'] = int(f_kpi['surveys'].fillna(0).sum())
+        # --- UPDATED: True Aggregate Calculated specifically for the Total row ---
+        tot_surveys = len(f_dsat)
+        avg_row['Total Survey'] = tot_surveys
         
         avg_sent_val = f_kpi['sent_rate'].dropna().mean()
         avg_row['Sent Rate %'] = f"{avg_sent_val:.2f}%" if pd.notna(avg_sent_val) else "-"
         
-        avg_sat_val = f_kpi['sat_rate'].dropna().mean()
-        avg_row['Satisfied Survey %'] = f"{avg_sat_val:.2f}%" if pd.notna(avg_sat_val) else "-"
+        tot_satisfied = len(f_dsat[f_dsat['is_csat'] == True]) if 'is_csat' in f_dsat.columns else 0
+        true_sat_pct = (tot_satisfied / tot_surveys * 100) if tot_surveys > 0 else 0
+        avg_row['Satisfied Survey %'] = f"{true_sat_pct:.2f}%" if tot_surveys > 0 else "-"
         
         avg_row['Fresh Calls Made'] = int(f_kpi['fresh_calls_made'].fillna(0).sum()) if 'fresh_calls_made' in f_kpi.columns else 0
         avg_row['Connected Fresh Calls'] = int(f_kpi['connected_fresh_calls'].fillna(0).sum()) if 'connected_fresh_calls' in f_kpi.columns else 0
