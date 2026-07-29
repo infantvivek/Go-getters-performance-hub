@@ -57,7 +57,8 @@ st.markdown("""
     footer { visibility: hidden !important; display: none !important; }
     
     /* 4. Hide the sidebar collapse control to lock it */
-    [data-testid="collapsedControl"] { display: none !important; }
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapseButton"] { display: none !important; }
     
     
     /* --- COZY INPUTS & SIDEBAR --- */
@@ -201,8 +202,10 @@ def load_and_standardize(url, sheet_type):
                         return x_str
                 
                 cleaned_ids = df['conversationid'].apply(clean_id)
+                df['conv_id'] = cleaned_ids
                 df['link'] = np.where(cleaned_ids == "-", "-", "https://highlevel-team.freshchat.com/a/309618592266199/inbox/0/254430/conversation/" + cleaned_ids)
             else:
+                df['conv_id'] = "-"
                 df['link'] = "-"
                 
             date_col = df['date_raw'] if 'date_raw' in df.columns else df['ts_raw'] if 'ts_raw' in df.columns else df.get('createddate', pd.Series())
@@ -278,7 +281,7 @@ def open_form_dialog(row):
     fb = row.get('feedback', '')
     tp = row.get('type', '')
     params = {
-        ENTRY_KEY: row.get('link', ''),
+        ENTRY_KEY: row.get('conv_id', ''),  # Submits the raw Conversation ID instead of URL
         ENTRY_FEEDBACK: fb if str(fb) != "nan" and fb != "-" else "",
         ENTRY_TYPE: tp if str(tp) != "nan" and tp != "-" else ""
     }
