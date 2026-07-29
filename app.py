@@ -208,6 +208,17 @@ def load_and_standardize(url, sheet_type):
                 df['conv_id'] = "-"
                 df['link'] = "-"
                 
+            if 'assignedgroup' in df.columns:
+                def map_call_type(x):
+                    x_str = str(x).strip()
+                    if x_str == "[S]: Advisor QA": return "QA"
+                    elif x_str in ["[S]: Advisor Onboarding", "[S]: Senior Onboarding"]: return "OB"
+                    elif pd.isna(x) or x_str.lower() in ['nan', 'null', '']: return "-"
+                    else: return x_str
+                df['call_type'] = df['assignedgroup'].apply(map_call_type)
+            else:
+                df['call_type'] = "-"
+                
             date_col = df['date_raw'] if 'date_raw' in df.columns else df['ts_raw'] if 'ts_raw' in df.columns else df.get('createddate', pd.Series())
             df['date_dt'] = pd.to_datetime(date_col, errors='coerce')
             df['date_dt'] = df['date_dt'].ffill()
@@ -448,6 +459,9 @@ if 'email' not in k_f.columns:
 access = str(user.get('level', 'IC')).strip()
 scoped_emails = []
 
+# New logic for hiding the advisor column in tables
+show_advisor_col = True
+
 if access in ["Admin", "Manager"]:
     mode = st.sidebar.selectbox("View Mode", ["Entire Team", "Specific Advisor"])
     
@@ -455,6 +469,7 @@ if access in ["Admin", "Manager"]:
     
     if mode == "Entire Team": 
         scoped_emails = all_team_emails
+        show_advisor_col = True
     else:
         adv_options = sorted(team_db[team_db['level'] == 'IC']['name'].dropna().astype(str).unique().tolist())
         if not adv_options: 
@@ -463,8 +478,10 @@ if access in ["Admin", "Manager"]:
         adv_sel = st.sidebar.selectbox("Select Advisor", adv_options)
         found = team_db[team_db['name'] == adv_sel]['email'].tolist()
         scoped_emails = found if found else all_team_emails
+        show_advisor_col = False
 else:
     scoped_emails = [user.get('email')]
+    show_advisor_col = False
 
 f_kpi = k_f[k_f['email'].isin(scoped_emails)]
 f_dsat = d_f[d_f['email'].isin(scoped_emails)]
@@ -650,8 +667,16 @@ with tab_dsat:
         
         if not pos_df.empty:
             pos_table = pos_df.copy()
-            headers = ["Date", "Advisor Name", "Customer Email", "Customer Comment", "Chat Link"]
-            col_w = [1.2, 1.5, 2, 3, 1.2]
+            
+            headers = ["Date"]
+            col_w = [1.2]
+            
+            if show_advisor_col:
+                headers.append("Advisor Name")
+                col_w.append(1.5)
+                
+            headers.extend(["Customer Email", "Call Type", "Customer Comment", "Chat Link"])
+            col_w.extend([2, 1, 3, 1.2])
             
             header_cols = st.columns(col_w)
             for i, h in enumerate(headers): header_cols[i].write(f"**{h}**")
@@ -661,18 +686,23 @@ with tab_dsat:
                 r = st.columns(col_w)
                 date_str = str(row['date_dt'])[:10] if pd.notna(row['date_dt']) else "-"
                 
-                r[0].write(date_str)
-                r[1].write(row.get('name', '-'))
-                r[2].write(row.get('customeremail', '-'))
+                c_idx = 0
+                r[c_idx].write(date_str); c_idx += 1
+                
+                if show_advisor_col:
+                    r[c_idx].write(row.get('name', '-')); c_idx += 1
+                    
+                r[c_idx].write(row.get('customeremail', '-')); c_idx += 1
+                r[c_idx].write(row.get('call_type', '-')); c_idx += 1
                 
                 cmt = str(row.get('customercomments', '-'))
-                r[3].write("-" if cmt.lower() in ['null', 'nan', ''] else cmt)
+                r[c_idx].write("-" if cmt.lower() in ['null', 'nan', ''] else cmt); c_idx += 1
                 
                 link_val = row.get('link', '-')
                 if link_val != "-":
-                    r[4].markdown(f"[🔗 View Chat]({link_val})")
+                    r[c_idx].markdown(f"[🔗 View Chat]({link_val})")
                 else:
-                    r[4].write("-")
+                    r[c_idx].write("-")
         else:
             st.info("No positive feedback available for the selected period.")
             
@@ -681,9 +711,19 @@ with tab_dsat:
         if not dsat_df.empty:
             neg_table = dsat_df.copy()
             
-            headers = ["Date", "Advisor Name", "Customer Email", "Customer Comment", "Chat Link", "Type", "Feedback"]
-            col_w = [1.2, 1.5, 2, 3, 1.2, 1, 2]
-            if access != "IC": headers.append("Action"); col_w.append(1)
+            headers = ["Date"]
+            col_w = [1.2]
+            
+            if show_advisor_col:
+                headers.append("Advisor Name")
+                col_w.append(1.5)
+                
+            headers.extend(["Customer Email", "Call Type", "Customer Comment", "Chat Link", "Type", "Feedback"])
+            col_w.extend([2, 1, 3, 1.2, 1, 2])
+            
+            if access != "IC": 
+                headers.append("Action")
+                col_w.append(1)
             
             header_cols = st.columns(col_w)
             for i, h in enumerate(headers): header_cols[i].write(f"**{h}**")
@@ -706,8 +746,12 @@ with tab_dsat:
                 
                 c_idx = 0
                 r[c_idx].write(date_str); c_idx += 1
-                r[c_idx].write(row.get('name', '-')); c_idx += 1
+                
+                if show_advisor_col:
+                    r[c_idx].write(row.get('name', '-')); c_idx += 1
+                    
                 r[c_idx].write(row.get('customeremail', '-')); c_idx += 1
+                r[c_idx].write(row.get('call_type', '-')); c_idx += 1
                 r[c_idx].write(cmt); c_idx += 1
                 
                 if link_val != "-":
