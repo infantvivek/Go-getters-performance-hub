@@ -20,7 +20,7 @@ ENTRY_KEY = "entry.1726897360"
 ENTRY_TYPE = "entry.1303252108"      
 ENTRY_FEEDBACK = "entry.1754509958"  
 
-# Set Menu Items to None to remove unwanted standard options
+# Set Menu Items to None to remove unwanted standard options natively where possible
 st.set_page_config(
     layout="wide", 
     page_title="GoHighLevel Performance Hub", 
@@ -41,10 +41,24 @@ st.markdown("""
     html, body, [class*="st-"] { font-family: 'Inter', sans-serif; }
     .material-icons, .material-symbols-rounded, [class*="icon"] { font-family: 'Material Symbols Rounded', 'Material Icons', sans-serif !important; }
     
-    /* --- HIDE UNWANTED BRANDING & LOCK SIDEBAR --- */
-    footer {visibility: hidden;}
-    [data-testid="stAppDeployButton"] {display: none !important;}
-    [data-testid="collapsedControl"] {display: none !important;} /* Removes sidebar minimize arrow */
+    /* --- STRICT CSS TO HIDE FORK, DEPLOY & UNWANTED MENU ITEMS --- */
+    
+    /* 1. Hide the Fork and Deploy buttons from the top toolbar */
+    .stAppDeployButton, [data-testid="stAppDeployButton"] { display: none !important; }
+    [data-testid="stToolbar"] a { display: none !important; }
+    
+    /* 2. Hide everything in the hamburger menu EXCEPT the theme toggle.
+       The theme toggle sits in a div ABOVE the main list. We hide the ul list 
+       and the "Made with Streamlit" div below it. */
+    ul[data-testid="main-menu-list"] { display: none !important; }
+    ul[data-testid="main-menu-list"] ~ div { display: none !important; }
+    
+    /* 3. Hide the global footer */
+    footer { visibility: hidden !important; display: none !important; }
+    
+    /* 4. Hide the sidebar collapse control to lock it */
+    [data-testid="collapsedControl"] { display: none !important; }
+    
     
     /* --- COZY INPUTS & SIDEBAR --- */
     .stTextInput input {
