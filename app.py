@@ -328,7 +328,6 @@ if access in ["Admin", "Manager"]:
     if mode == "Entire Team": 
         scoped_emails = all_team_emails
     else:
-        # UPDATED: Alphabetical Sorting applied here
         adv_options = sorted(team_db[team_db['level'] == 'IC']['name'].dropna().astype(str).unique().tolist())
         if not adv_options: 
             adv_options = sorted(team_db['name'].dropna().astype(str).unique().tolist())
@@ -349,8 +348,7 @@ with header_col2: st.title("GoHighLevel Performance Hub")
 
 st.success(f"Welcome **{user.get('name', 'User')}**! | Access Level : **{access}**")
 
-# --- NEW: GLOBALLY PRE-CALCULATE TRUE AGGREGATES ---
-# This fixes the "Average of Averages" bug for the Leaderboard and Scorecard
+# --- GLOBALLY PRE-CALCULATE TRUE AGGREGATES ---
 if not f_dsat.empty and 'is_csat' in f_dsat.columns:
     agent_csat_stats = f_dsat.groupby('name').agg(
         true_surveys=('is_csat', 'count'),
@@ -410,7 +408,7 @@ with tab_perf:
     tot_qa = int(f_kpi['qa'].fillna(0).sum()) if not f_kpi.empty else 0
     
     c1.markdown(create_metric_card("Avg Survey Sent", avg_sent, 85, True), unsafe_allow_html=True)
-    c2.markdown(create_metric_card("Avg Satisfied", avg_sat, 90, True), unsafe_allow_html=True)
+    c2.markdown(create_metric_card("Avg Satisfied (True Aggregate)", avg_sat, 90, True), unsafe_allow_html=True)
     c3.markdown(create_metric_card("Total Surveys", tot_surveys, None, False), unsafe_allow_html=True)
     
     c4.markdown(create_metric_card("Total OB Calls", tot_ob, None, False), unsafe_allow_html=True)
@@ -419,6 +417,12 @@ with tab_perf:
     avg_ia_hrs = (f_kpi['ia_min'].mean() / 60) if (not f_kpi.empty and 'ia_min' in f_kpi.columns) else 0
     ia_color = "#22C55E" if avg_ia_hrs >= 6 else ("#F59E0B" if avg_ia_hrs >= 5 else "#EF4444")
     c6.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: 6.0h"), unsafe_allow_html=True)
+
+    # --- NEW: Admin Only KPI Data Comparison ---
+    if access == "Admin":
+        st.markdown("#### 🔒 Admin Insights")
+        kpi_csat = f_kpi['sat_rate'].dropna().mean() if not f_kpi.empty and 'sat_rate' in f_kpi.columns else 0
+        st.markdown(format_custom_card("Admin Insight: KPI Sheet CSAT", f"{kpi_csat:.2f}%", "#8B5CF6", "Average of Averages (from KPI Sheet)"), unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Call Abandons & Fresh Calls", unsafe_allow_html=True)
@@ -478,12 +482,18 @@ with tab_dsat:
     s1.markdown(format_custom_card("Total Surveys", total_surveys, "#0052FF", "Overall Volume"), unsafe_allow_html=True)
     s2.markdown(format_custom_card("Total Satisfied", satisfied_surveys, "#22C55E", "CSAT Count"), unsafe_allow_html=True)
     s3.markdown(format_custom_card("Total DSATs", dsat_surveys, "#EF4444", "Negative Count"), unsafe_allow_html=True)
-    s4.markdown(format_custom_card("Satisfaction %", f"{csat_pct:.2f}%", "#22C55E" if csat_pct >= 90 else "#F59E0B", "Target: 90%"), unsafe_allow_html=True)
+    s4.markdown(format_custom_card("Satisfaction % (True Aggregate)", f"{csat_pct:.2f}%", "#22C55E" if csat_pct >= 90 else "#F59E0B", "Target: 90%"), unsafe_allow_html=True)
 
     s5, s6, s7 = st.columns(3)
     s5.markdown(format_custom_card("Feedback Pending", pending_count, "#F59E0B" if pending_count > 0 else "#22C55E", "Action Required"), unsafe_allow_html=True)
     s6.markdown(format_custom_card("Controllable", control_count, "#8B5CF6", "DSAT Type"), unsafe_allow_html=True)
     s7.markdown(format_custom_card("Uncontrollable", uncontrol_count, "#64748B", "DSAT Type"), unsafe_allow_html=True)
+
+    # --- NEW: Admin Only KPI Data Comparison ---
+    if access == "Admin":
+        st.markdown("#### 🔒 Admin Insights")
+        kpi_csat_dsat_tab = f_kpi['sat_rate'].dropna().mean() if not f_kpi.empty and 'sat_rate' in f_kpi.columns else 0
+        st.markdown(format_custom_card("Admin Insight: KPI Sheet CSAT", f"{kpi_csat_dsat_tab:.2f}%", "#8B5CF6", "Average of Averages (from KPI Sheet)"), unsafe_allow_html=True)
 
     st.markdown("---")
     
@@ -580,7 +590,6 @@ if tab_lead:
                 ob=('ob', 'sum')
             ).reset_index()
             
-            # --- UPDATED: Merge accurately calculated CSAT numbers per agent ---
             ldb = ldb.merge(agent_csat_stats[['name', 'true_sat_rate']], on='name', how='left')
             ldb['sat_rate'] = ldb['true_sat_rate'].fillna(0)
             
@@ -639,7 +648,6 @@ if tab_scorecard:
                 qa=('qa', 'sum')
             ).reset_index()
             
-            # --- UPDATED: Merge accurately calculated CSAT numbers and Total Surveys per agent ---
             sc_df = sc_df.merge(agent_csat_stats[['name', 'true_surveys', 'true_sat_rate']], on='name', how='left')
             sc_df['sat_rate'] = sc_df['true_sat_rate'].fillna(0)
             sc_df['surveys'] = sc_df['true_surveys'].fillna(0)
@@ -705,7 +713,6 @@ with tab_report:
         avg_row['Q/A Calls'] = int(f_kpi['qa'].fillna(0).sum())
         avg_row['Tickets Created'] = int(f_kpi['ticketscreated'].fillna(0).sum()) if 'ticketscreated' in f_kpi.columns else 0
         
-        # --- UPDATED: True Aggregate Calculated specifically for the Total row ---
         tot_surveys = len(f_dsat)
         avg_row['Total Survey'] = tot_surveys
         
