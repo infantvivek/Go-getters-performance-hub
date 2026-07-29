@@ -418,11 +418,15 @@ with tab_perf:
     ia_color = "#22C55E" if avg_ia_hrs >= 6 else ("#F59E0B" if avg_ia_hrs >= 5 else "#EF4444")
     c6.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: 6.0h"), unsafe_allow_html=True)
 
-    # --- NEW: Admin Only KPI Data Comparison ---
+    # --- UPDATED: Admin Only KPI Data Comparison ---
     if access == "Admin":
         st.markdown("#### 🔒 Admin Insights")
+        a1, a2 = st.columns(2)
         kpi_csat = f_kpi['sat_rate'].dropna().mean() if not f_kpi.empty and 'sat_rate' in f_kpi.columns else 0
-        st.markdown(format_custom_card("Admin Insight: KPI Sheet CSAT", f"{kpi_csat:.2f}%", "#8B5CF6", "Average of Averages (from KPI Sheet)"), unsafe_allow_html=True)
+        kpi_surveys = int(f_kpi['surveys'].fillna(0).sum()) if not f_kpi.empty and 'surveys' in f_kpi.columns else 0
+        
+        a1.markdown(format_custom_card("Admin Insight: KPI Sheet CSAT", f"{kpi_csat:.2f}%", "#8B5CF6", "Average of Averages (from KPI Sheet)"), unsafe_allow_html=True)
+        a2.markdown(format_custom_card("Admin Insight: KPI Sheet Surveys", kpi_surveys, "#8B5CF6", "Total Surveys (from KPI Sheet)"), unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Call Abandons & Fresh Calls", unsafe_allow_html=True)
@@ -489,11 +493,15 @@ with tab_dsat:
     s6.markdown(format_custom_card("Controllable", control_count, "#8B5CF6", "DSAT Type"), unsafe_allow_html=True)
     s7.markdown(format_custom_card("Uncontrollable", uncontrol_count, "#64748B", "DSAT Type"), unsafe_allow_html=True)
 
-    # --- NEW: Admin Only KPI Data Comparison ---
+    # --- UPDATED: Admin Only KPI Data Comparison ---
     if access == "Admin":
         st.markdown("#### 🔒 Admin Insights")
+        a3, a4 = st.columns(2)
         kpi_csat_dsat_tab = f_kpi['sat_rate'].dropna().mean() if not f_kpi.empty and 'sat_rate' in f_kpi.columns else 0
-        st.markdown(format_custom_card("Admin Insight: KPI Sheet CSAT", f"{kpi_csat_dsat_tab:.2f}%", "#8B5CF6", "Average of Averages (from KPI Sheet)"), unsafe_allow_html=True)
+        kpi_surveys_dsat_tab = int(f_kpi['surveys'].fillna(0).sum()) if not f_kpi.empty and 'surveys' in f_kpi.columns else 0
+        
+        a3.markdown(format_custom_card("Admin Insight: KPI Sheet CSAT", f"{kpi_csat_dsat_tab:.2f}%", "#8B5CF6", "Average of Averages (from KPI Sheet)"), unsafe_allow_html=True)
+        a4.markdown(format_custom_card("Admin Insight: KPI Sheet Surveys", kpi_surveys_dsat_tab, "#8B5CF6", "Total Surveys (from KPI Sheet)"), unsafe_allow_html=True)
 
     st.markdown("---")
     
