@@ -30,7 +30,11 @@ st.markdown("""
     
     :root { --ghl-blue: #0052FF; --ghl-dark: #1E293B; }
 
-    .stMetric { background-color: var(--secondary-background-color); padding: 20px; border-radius: 12px; border: 1px solid rgba(0, 82, 255, 0.1); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05); }
+    /* --- HIDE STREAMLIT BRANDING & OVERLAYS --- */
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    [data-testid="stToolbar"] {visibility: hidden !important;}
+    footer {visibility: hidden;}
     
     [data-testid="stSidebarNav"]::before {
         content: ""; display: block; background-image: url('""" + LOGO_URL + """');
@@ -38,31 +42,58 @@ st.markdown("""
         width: 170px; height: 50px; margin: 25px 0 10px 25px; filter: brightness(0) invert(1); 
     }
     
-    /* NEW: Enhanced Tab Styling */
+    /* --- MODERNIZED TABS --- */
     div[data-testid="stTabs"] button[role="tab"] {
-        background-color: var(--secondary-background-color);
-        border: 1px solid rgba(0, 82, 255, 0.2);
-        border-radius: 8px;
-        padding: 10px 24px;
-        margin-right: 8px;
-        margin-bottom: 15px;
+        background-color: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 20px;
+        padding: 8px 24px;
+        margin-right: 10px;
+        margin-bottom: 20px;
         color: var(--text-color);
         font-weight: 500;
-        transition: all 0.2s ease;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-        background-color: var(--ghl-blue) !important;
+        background: linear-gradient(135deg, #0052FF 0%, #0036A8 100%) !important;
         color: white !important;
-        border-color: var(--ghl-blue) !important;
+        border: none !important;
         font-weight: 700;
-        box-shadow: 0 4px 10px rgba(0, 82, 255, 0.3);
+        box-shadow: 0 6px 16px rgba(0, 82, 255, 0.4) !important;
+        transform: translateY(-2px);
     }
     div[data-testid="stTabs"] button[role="tab"]:hover {
-        border-color: var(--ghl-blue);
+        border-color: #0052FF;
+        transform: translateY(-1px);
     }
     
-    div.stInfo { background-color: rgba(0, 82, 255, 0.05); border-left: 5px solid #0052FF; color: var(--text-color); border-radius: 10px; padding: 15px; font-size: 15px; }
+    /* --- SLEEK METRIC CARDS --- */
+    .metric-card {
+        background: linear-gradient(145deg, var(--secondary-background-color), rgba(255,255,255,0.02));
+        padding: 22px; 
+        border-radius: 16px; 
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15); 
+        margin-bottom: 1.2rem;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    .metric-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
+    }
+    .metric-title {
+        color: var(--text-color); opacity: 0.7; font-size: 13px; margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;
+    }
+    .metric-value {
+        margin-top: 0; margin-bottom: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;
+    }
+    .metric-sub {
+        color: var(--text-color); opacity: 0.5; font-size: 12px; margin-top: 8px; font-weight: 500;
+    }
     
+    div.stInfo { background-color: rgba(0, 82, 255, 0.05); border-left: 5px solid #0052FF; color: var(--text-color); border-radius: 10px; padding: 15px; font-size: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     .ghl-header-img { margin-bottom: 10px; filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.1)); }
     .tab-logo { width: 35px; vertical-align: middle; margin-right: 10px; padding-bottom: 5px; }
     </style>
@@ -145,32 +176,35 @@ def load_and_standardize(url, sheet_type):
     except Exception as e:
         return pd.DataFrame()
 
-def create_metric_card(title, value, target=None, is_percent=True):
-    if target:
-        if value >= target: color = "#22C55E"
-        elif value >= target - 15: color = "#F59E0B"
+def create_metric_card(title, value, target_val=None, is_percent=True, exact_target_str=None):
+    if target_val is not None:
+        if value > target_val: color = "#22C55E"
+        elif value >= target_val - 15: color = "#F59E0B"
         else: color = "#EF4444"
     else:
         color = "#0052FF" 
 
     val_str = f"{value:.2f}%" if is_percent else f"{int(value):,}"
-    target_str = f"Target: {target}{'%' if is_percent else ''}" if target else "Activity Metric"
+    
+    if exact_target_str: target_str = exact_target_str
+    elif target_val: target_str = f"Target: {target_val}{'%' if is_percent else ''}"
+    else: target_str = "Activity Metric"
     
     html = f"""
-    <div style="background-color: var(--secondary-background-color); padding: 18px; border-radius: 12px; border-left: 6px solid {color}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
-        <p style="color: var(--text-color); opacity: 0.8; font-size: 14px; margin-bottom: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">{title}</p>
-        <h2 style="color: {color}; margin-top: 0; margin-bottom: 0; font-size: 30px; font-weight: 700;">{val_str}</h2>
-        <p style="color: var(--text-color); opacity: 0.6; font-size: 12px; margin-top: 5px; font-weight: 500;">{target_str}</p>
+    <div class="metric-card" style="border-left: 6px solid {color};">
+        <p class="metric-title">{title}</p>
+        <h2 class="metric-value" style="color: {color};">{val_str}</h2>
+        <p class="metric-sub">{target_str}</p>
     </div>
     """
     return html
 
 def format_custom_card(title, val, color, sub_txt):
     return f"""
-    <div style="background-color: var(--secondary-background-color); padding: 18px; border-radius: 12px; border-left: 6px solid {color}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
-        <p style="color: var(--text-color); opacity: 0.8; font-size: 14px; margin-bottom: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">{title}</p>
-        <h2 style="color: {color}; margin-top: 0; margin-bottom: 0; font-size: 30px; font-weight: 700;">{val}</h2>
-        <p style="color: var(--text-color); opacity: 0.6; font-size: 12px; margin-top: 5px; font-weight: 500;">{sub_txt}</p>
+    <div class="metric-card" style="border-left: 6px solid {color};">
+        <p class="metric-title">{title}</p>
+        <h2 class="metric-value" style="color: {color};">{val}</h2>
+        <p class="metric-sub">{sub_txt}</p>
     </div>
     """
 
@@ -439,7 +473,6 @@ tab_report = ui_tabs[current_tab_idx]
 with tab_perf:
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Performance Narrative", unsafe_allow_html=True)
     
-    # --- UPDATED: Performance Narrative specific to IA, Avg Sat, and Call Follow-ups ---
     avg_ia_hrs_n = (f_kpi['ia_min'].mean() / 60) if (not f_kpi.empty and 'ia_min' in f_kpi.columns) else 0
     tot_surveys_n = len(f_dsat)
     tot_satisfied_n = len(f_dsat[f_dsat['is_csat'] == True]) if 'is_csat' in f_dsat.columns else 0
@@ -473,18 +506,16 @@ with tab_perf:
     tot_ob = int(f_kpi['ob'].fillna(0).sum()) if not f_kpi.empty else 0
     tot_qa = int(f_kpi['qa'].fillna(0).sum()) if not f_kpi.empty else 0
     
-    c1.markdown(create_metric_card("Avg Survey Sent", avg_sent, 85, True), unsafe_allow_html=True)
-    c2.markdown(create_metric_card("Avg Satisfied (True Aggregate)", avg_sat, 90, True), unsafe_allow_html=True)
+    c1.markdown(create_metric_card("Avg Survey Sent", avg_sent, 85, True, "Target: >85%"), unsafe_allow_html=True)
+    c2.markdown(create_metric_card("Avg Satisfied (True Aggregate)", avg_sat, 90, True, "Target: >90%"), unsafe_allow_html=True)
     c3.markdown(create_metric_card("Total Surveys", tot_surveys, None, False), unsafe_allow_html=True)
     
     c4.markdown(create_metric_card("Total OB Calls", tot_ob, None, False), unsafe_allow_html=True)
     c5.markdown(create_metric_card("Total QA Calls", tot_qa, None, False), unsafe_allow_html=True)
 
     avg_ia_hrs = (f_kpi['ia_min'].mean() / 60) if (not f_kpi.empty and 'ia_min' in f_kpi.columns) else 0
-    ia_color = "#22C55E" if avg_ia_hrs >= 6 else ("#F59E0B" if avg_ia_hrs >= 5 else "#EF4444")
-    c6.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: 6.0h"), unsafe_allow_html=True)
-
-    # Note: Admin Insights removed from Performance Overview
+    ia_color = "#22C55E" if avg_ia_hrs > 6 else ("#F59E0B" if avg_ia_hrs >= 5 else "#EF4444")
+    c6.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: >6.0h"), unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Call Abandons & Fresh Calls", unsafe_allow_html=True)
@@ -544,7 +575,9 @@ with tab_dsat:
     s1.markdown(format_custom_card("Total Surveys", total_surveys, "#0052FF", "Overall Volume"), unsafe_allow_html=True)
     s2.markdown(format_custom_card("Total Satisfied", satisfied_surveys, "#22C55E", "CSAT Count"), unsafe_allow_html=True)
     s3.markdown(format_custom_card("Total DSATs", dsat_surveys, "#EF4444", "Negative Count"), unsafe_allow_html=True)
-    s4.markdown(format_custom_card("Satisfaction % (True Aggregate)", f"{csat_pct:.2f}%", "#22C55E" if csat_pct >= 90 else "#F59E0B", "Target: 90%"), unsafe_allow_html=True)
+    
+    csat_color = "#22C55E" if csat_pct > 90 else ("#F59E0B" if csat_pct >= 75 else "#EF4444")
+    s4.markdown(format_custom_card("Satisfaction % (True Aggregate)", f"{csat_pct:.2f}%", csat_color, "Target: >90%"), unsafe_allow_html=True)
 
     s5, s6, s7 = st.columns(3)
     s5.markdown(format_custom_card("Feedback Pending", pending_count, "#F59E0B" if pending_count > 0 else "#22C55E", "Action Required"), unsafe_allow_html=True)
