@@ -38,7 +38,29 @@ st.markdown("""
         width: 170px; height: 50px; margin: 25px 0 10px 25px; filter: brightness(0) invert(1); 
     }
     
-    .stTabs [aria-selected="true"] { background-color: var(--ghl-blue) !important; color: white !important; border-radius: 8px; font-weight: 600; }
+    /* NEW: Enhanced Tab Styling */
+    div[data-testid="stTabs"] button[role="tab"] {
+        background-color: var(--secondary-background-color);
+        border: 1px solid rgba(0, 82, 255, 0.2);
+        border-radius: 8px;
+        padding: 10px 24px;
+        margin-right: 8px;
+        margin-bottom: 15px;
+        color: var(--text-color);
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+        background-color: var(--ghl-blue) !important;
+        color: white !important;
+        border-color: var(--ghl-blue) !important;
+        font-weight: 700;
+        box-shadow: 0 4px 10px rgba(0, 82, 255, 0.3);
+    }
+    div[data-testid="stTabs"] button[role="tab"]:hover {
+        border-color: var(--ghl-blue);
+    }
+    
     div.stInfo { background-color: rgba(0, 82, 255, 0.05); border-left: 5px solid #0052FF; color: var(--text-color); border-radius: 10px; padding: 15px; font-size: 15px; }
     
     .ghl-header-img { margin-bottom: 10px; filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.1)); }
@@ -157,16 +179,13 @@ def display_admin_discrepancies(kpi_df, dsat_df):
     st.caption("Showing only dates where the KPI Sheet total surveys does not match the raw CSAT Sheet volume.")
     
     if not kpi_df.empty and not dsat_df.empty and 'surveys' in kpi_df.columns:
-        # Group both datasets by date
         kpi_daily = kpi_df.groupby(kpi_df['date_dt'].dt.date)['surveys'].sum().reset_index(name='kpi_surveys')
         dsat_daily = dsat_df.groupby(dsat_df['date_dt'].dt.date).size().reset_index(name='dsat_surveys')
         
-        # Merge on date
         diff_df = pd.merge(kpi_daily, dsat_daily, on='date_dt', how='outer').fillna(0)
         diff_df['kpi_surveys'] = diff_df['kpi_surveys'].astype(int)
         diff_df['dsat_surveys'] = diff_df['dsat_surveys'].astype(int)
         
-        # Filter strictly for discrepancies
         discrepancies = diff_df[diff_df['kpi_surveys'] != diff_df['dsat_surveys']].copy()
         
         if not discrepancies.empty:
@@ -419,11 +438,26 @@ tab_report = ui_tabs[current_tab_idx]
 
 with tab_perf:
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Performance Narrative", unsafe_allow_html=True)
-    tot_ia = f_kpi['ia_min'].sum() if not f_kpi.empty else 0
-    tot_call = f_kpi['call_min'].sum() if not f_kpi.empty else 0
-    avg_score = (tot_call / tot_ia * 100) if tot_ia > 0 else 0
     
-    st.info(f"In the selected timeframe, the group maintains an average Shift Score of **{avg_score:.2f}%**. Monitoring trends indicate consistent engagement during active operations.")
+    # --- UPDATED: Performance Narrative specific to IA, Avg Sat, and Call Follow-ups ---
+    avg_ia_hrs_n = (f_kpi['ia_min'].mean() / 60) if (not f_kpi.empty and 'ia_min' in f_kpi.columns) else 0
+    tot_surveys_n = len(f_dsat)
+    tot_satisfied_n = len(f_dsat[f_dsat['is_csat'] == True]) if 'is_csat' in f_dsat.columns else 0
+    avg_sat_n = (tot_satisfied_n / tot_surveys_n * 100) if tot_surveys_n > 0 else 0
+    
+    tot_abandons_n = int(f_kpi['callabandons'].fillna(0).sum()) if not f_kpi.empty and 'callabandons' in f_kpi.columns else 0
+    tot_fresh_made_n = int(f_kpi['fresh_calls_made'].fillna(0).sum()) if not f_kpi.empty and 'fresh_calls_made' in f_kpi.columns else 0
+    
+    fresh_ratio_text = ""
+    if tot_abandons_n > 0:
+        if tot_fresh_made_n >= tot_abandons_n:
+            fresh_ratio_text = f"Outstanding follow-up effort! The team made **{tot_fresh_made_n}** fresh calls against **{tot_abandons_n}** abandons, successfully meeting the ideal 1:1 follow-up requirement."
+        else:
+            fresh_ratio_text = f"Attention needed on call follow-ups: The team recorded **{tot_abandons_n}** call abandons but only made **{tot_fresh_made_n}** fresh calls. The ideal target is to make at least one fresh call for every abandoned call to maximize engagement."
+    else:
+        fresh_ratio_text = f"Great job minimizing missed opportunities with **0** call abandons recorded, while successfully executing **{tot_fresh_made_n}** outbound fresh calls."
+
+    st.info(f"During this period, the selected group achieved a True Aggregate Satisfaction of **{avg_sat_n:.2f}%** and averaged **{avg_ia_hrs_n:.1f} hours** of IA time. {fresh_ratio_text}")
     
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Performance Summary", unsafe_allow_html=True)
     
@@ -450,17 +484,7 @@ with tab_perf:
     ia_color = "#22C55E" if avg_ia_hrs >= 6 else ("#F59E0B" if avg_ia_hrs >= 5 else "#EF4444")
     c6.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: 6.0h"), unsafe_allow_html=True)
 
-    if access == "Admin":
-        st.markdown("#### 🔒 Admin Insights")
-        a1, a2 = st.columns(2)
-        kpi_csat = f_kpi['sat_rate'].dropna().mean() if not f_kpi.empty and 'sat_rate' in f_kpi.columns else 0
-        kpi_surveys = int(f_kpi['surveys'].fillna(0).sum()) if not f_kpi.empty and 'surveys' in f_kpi.columns else 0
-        
-        a1.markdown(format_custom_card("Admin Insight: KPI Sheet CSAT", f"{kpi_csat:.2f}%", "#8B5CF6", "Average of Averages (from KPI Sheet)"), unsafe_allow_html=True)
-        a2.markdown(format_custom_card("Admin Insight: KPI Sheet Surveys", kpi_surveys, "#8B5CF6", "Total Surveys (from KPI Sheet)"), unsafe_allow_html=True)
-        
-        # --- NEW: Daily Discrepancy Tool ---
-        display_admin_discrepancies(f_kpi, f_dsat)
+    # Note: Admin Insights removed from Performance Overview
 
     st.markdown("---")
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Call Abandons & Fresh Calls", unsafe_allow_html=True)
@@ -536,7 +560,6 @@ with tab_dsat:
         a3.markdown(format_custom_card("Admin Insight: KPI Sheet CSAT", f"{kpi_csat_dsat_tab:.2f}%", "#8B5CF6", "Average of Averages (from KPI Sheet)"), unsafe_allow_html=True)
         a4.markdown(format_custom_card("Admin Insight: KPI Sheet Surveys", kpi_surveys_dsat_tab, "#8B5CF6", "Total Surveys (from KPI Sheet)"), unsafe_allow_html=True)
         
-        # --- NEW: Daily Discrepancy Tool ---
         display_admin_discrepancies(f_kpi, f_dsat)
 
     st.markdown("---")
