@@ -152,6 +152,38 @@ def format_custom_card(title, val, color, sub_txt):
     </div>
     """
 
+def display_admin_discrepancies(kpi_df, dsat_df):
+    st.markdown("##### 🔍 Daily Survey Volume Discrepancies")
+    st.caption("Showing only dates where the KPI Sheet total surveys does not match the raw CSAT Sheet volume.")
+    
+    if not kpi_df.empty and not dsat_df.empty and 'surveys' in kpi_df.columns:
+        # Group both datasets by date
+        kpi_daily = kpi_df.groupby(kpi_df['date_dt'].dt.date)['surveys'].sum().reset_index(name='kpi_surveys')
+        dsat_daily = dsat_df.groupby(dsat_df['date_dt'].dt.date).size().reset_index(name='dsat_surveys')
+        
+        # Merge on date
+        diff_df = pd.merge(kpi_daily, dsat_daily, on='date_dt', how='outer').fillna(0)
+        diff_df['kpi_surveys'] = diff_df['kpi_surveys'].astype(int)
+        diff_df['dsat_surveys'] = diff_df['dsat_surveys'].astype(int)
+        
+        # Filter strictly for discrepancies
+        discrepancies = diff_df[diff_df['kpi_surveys'] != diff_df['dsat_surveys']].copy()
+        
+        if not discrepancies.empty:
+            discrepancies['Difference (KPI - CSAT)'] = discrepancies['kpi_surveys'] - discrepancies['dsat_surveys']
+            discrepancies = discrepancies.rename(columns={
+                'date_dt': 'Date',
+                'kpi_surveys': 'KPI Sheet Volume',
+                'dsat_surveys': 'CSAT Sheet Volume'
+            }).sort_values('Date', ascending=False)
+            
+            st.dataframe(discrepancies, hide_index=True, use_container_width=True)
+        else:
+            st.success("No daily volume discrepancies detected in the selected period. Both sheets match perfectly!")
+    else:
+        st.info("Insufficient data available to compare daily discrepancies.")
+
+
 @st.dialog("Update Feedback & Type", width="large")
 def open_form_dialog(row):
     fb = row.get('feedback', '')
@@ -418,7 +450,6 @@ with tab_perf:
     ia_color = "#22C55E" if avg_ia_hrs >= 6 else ("#F59E0B" if avg_ia_hrs >= 5 else "#EF4444")
     c6.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: 6.0h"), unsafe_allow_html=True)
 
-    # --- UPDATED: Admin Only KPI Data Comparison ---
     if access == "Admin":
         st.markdown("#### 🔒 Admin Insights")
         a1, a2 = st.columns(2)
@@ -427,6 +458,9 @@ with tab_perf:
         
         a1.markdown(format_custom_card("Admin Insight: KPI Sheet CSAT", f"{kpi_csat:.2f}%", "#8B5CF6", "Average of Averages (from KPI Sheet)"), unsafe_allow_html=True)
         a2.markdown(format_custom_card("Admin Insight: KPI Sheet Surveys", kpi_surveys, "#8B5CF6", "Total Surveys (from KPI Sheet)"), unsafe_allow_html=True)
+        
+        # --- NEW: Daily Discrepancy Tool ---
+        display_admin_discrepancies(f_kpi, f_dsat)
 
     st.markdown("---")
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Call Abandons & Fresh Calls", unsafe_allow_html=True)
@@ -493,7 +527,6 @@ with tab_dsat:
     s6.markdown(format_custom_card("Controllable", control_count, "#8B5CF6", "DSAT Type"), unsafe_allow_html=True)
     s7.markdown(format_custom_card("Uncontrollable", uncontrol_count, "#64748B", "DSAT Type"), unsafe_allow_html=True)
 
-    # --- UPDATED: Admin Only KPI Data Comparison ---
     if access == "Admin":
         st.markdown("#### 🔒 Admin Insights")
         a3, a4 = st.columns(2)
@@ -502,6 +535,9 @@ with tab_dsat:
         
         a3.markdown(format_custom_card("Admin Insight: KPI Sheet CSAT", f"{kpi_csat_dsat_tab:.2f}%", "#8B5CF6", "Average of Averages (from KPI Sheet)"), unsafe_allow_html=True)
         a4.markdown(format_custom_card("Admin Insight: KPI Sheet Surveys", kpi_surveys_dsat_tab, "#8B5CF6", "Total Surveys (from KPI Sheet)"), unsafe_allow_html=True)
+        
+        # --- NEW: Daily Discrepancy Tool ---
+        display_admin_discrepancies(f_kpi, f_dsat)
 
     st.markdown("---")
     
