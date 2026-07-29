@@ -20,21 +20,44 @@ ENTRY_KEY = "entry.1726897360"
 ENTRY_TYPE = "entry.1303252108"      
 ENTRY_FEEDBACK = "entry.1754509958"  
 
-st.set_page_config(layout="wide", page_title="GoHighLevel Performance Hub", page_icon="🚀")
+# Set Menu Items to None to remove unwanted standard options
+st.set_page_config(
+    layout="wide", 
+    page_title="GoHighLevel Performance Hub", 
+    page_icon="🚀", 
+    menu_items={'Get Help': None, 'Report a bug': None, 'About': None}
+)
 
 # --- 2. SaaS/GHL THEME ENGINE ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    html, body, [class*="st-"] { font-family: 'Inter', sans-serif; }
+    @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@48,400,0,0');
     
     :root { --ghl-blue: #0052FF; --ghl-dark: #1E293B; }
 
-    /* --- HIDE STREAMLIT BRANDING & OVERLAYS --- */
-    #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
-    [data-testid="stToolbar"] {visibility: hidden !important;}
+    /* Apply Inter font, but strictly EXCLUDE icon classes so the password eye icon works! */
+    html, body, [class*="st-"] { font-family: 'Inter', sans-serif; }
+    .material-icons, .material-symbols-rounded, [class*="icon"] { font-family: 'Material Symbols Rounded', 'Material Icons', sans-serif !important; }
+    
+    /* --- HIDE UNWANTED BRANDING & LOCK SIDEBAR --- */
     footer {visibility: hidden;}
+    [data-testid="stAppDeployButton"] {display: none !important;}
+    [data-testid="collapsedControl"] {display: none !important;} /* Removes sidebar minimize arrow */
+    
+    /* --- COZY INPUTS & SIDEBAR --- */
+    .stTextInput input {
+        border-radius: 12px !important;
+        padding: 12px 16px !important;
+        border: 1px solid rgba(0, 82, 255, 0.15) !important;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.02) !important;
+        transition: all 0.2s ease;
+    }
+    .stTextInput input:focus {
+        border-color: var(--ghl-blue) !important;
+        box-shadow: 0 0 0 3px rgba(0, 82, 255, 0.15) !important;
+    }
     
     [data-testid="stSidebarNav"]::before {
         content: ""; display: block; background-image: url('""" + LOGO_URL + """');
@@ -53,14 +76,14 @@ st.markdown("""
         color: var(--text-color);
         font-weight: 500;
         transition: all 0.3s ease;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
     div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
         background: linear-gradient(135deg, #0052FF 0%, #0036A8 100%) !important;
         color: white !important;
         border: none !important;
         font-weight: 700;
-        box-shadow: 0 6px 16px rgba(0, 82, 255, 0.4) !important;
+        box-shadow: 0 6px 16px rgba(0, 82, 255, 0.3) !important;
         transform: translateY(-2px);
     }
     div[data-testid="stTabs"] button[role="tab"]:hover {
@@ -71,9 +94,9 @@ st.markdown("""
     /* --- SLEEK METRIC CARDS --- */
     .metric-card {
         background: linear-gradient(145deg, var(--secondary-background-color), rgba(255,255,255,0.02));
-        padding: 22px; 
-        border-radius: 16px; 
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15); 
+        padding: 24px; 
+        border-radius: 20px; 
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08); 
         margin-bottom: 1.2rem;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
         position: relative;
@@ -81,7 +104,7 @@ st.markdown("""
     }
     .metric-card:hover {
         transform: translateY(-4px);
-        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
+        box-shadow: 0 14px 30px rgba(0, 0, 0, 0.15);
     }
     .metric-title {
         color: var(--text-color); opacity: 0.7; font-size: 13px; margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;
@@ -93,7 +116,7 @@ st.markdown("""
         color: var(--text-color); opacity: 0.5; font-size: 12px; margin-top: 8px; font-weight: 500;
     }
     
-    div.stInfo { background-color: rgba(0, 82, 255, 0.05); border-left: 5px solid #0052FF; color: var(--text-color); border-radius: 10px; padding: 15px; font-size: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    div.stInfo { background-color: rgba(0, 82, 255, 0.04); border-left: 5px solid #0052FF; color: var(--text-color); border-radius: 12px; padding: 18px; font-size: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.03); margin-bottom: 1rem; }
     .ghl-header-img { margin-bottom: 10px; filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.1)); }
     .tab-logo { width: 35px; vertical-align: middle; margin-right: 10px; padding-bottom: 5px; }
     </style>
@@ -236,7 +259,6 @@ def display_admin_discrepancies(kpi_df, dsat_df):
     else:
         st.info("Insufficient data available to compare daily discrepancies.")
 
-
 @st.dialog("Update Feedback & Type", width="large")
 def open_form_dialog(row):
     fb = row.get('feedback', '')
@@ -283,9 +305,13 @@ if st.session_state.auth:
     st.session_state.last_active = current_time
 
 if not st.session_state.auth:
-    col_l, col_r = st.columns([1, 4])
-    with col_l: st.image(LOGO_URL, width=150)
-    with col_r: st.title("HighLevel Performance Hub")
+    st.write("") # Spacer
+    st.write("") # Spacer
+    col_l, col_r = st.columns([1.2, 5])
+    with col_l: st.image(LOGO_URL, width=220)
+    with col_r: 
+        st.write("") # Vertical alignment 
+        st.title("HighLevel Performance Hub")
     
     with st.form("login"):
         u_email = st.text_input("Work Email").lower().strip()
@@ -427,9 +453,11 @@ f_kpi = k_f[k_f['email'].isin(scoped_emails)]
 f_dsat = d_f[d_f['email'].isin(scoped_emails)]
 
 # --- 7. MAIN UI ---
-header_col1, header_col2 = st.columns([1, 10])
-with header_col1: st.image(LOGO_URL, width=80)
-with header_col2: st.title("GoHighLevel Performance Hub")
+header_col1, header_col2 = st.columns([1, 8])
+with header_col1: st.image(LOGO_URL, width=130)
+with header_col2: 
+    st.write("") # Vertical alignment
+    st.title("GoHighLevel Performance Hub")
 
 st.success(f"Welcome **{user.get('name', 'User')}**! | Access Level : **{access}**")
 
