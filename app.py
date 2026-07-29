@@ -211,8 +211,8 @@ def load_and_standardize(url, sheet_type):
             if 'assignedgroup' in df.columns:
                 def map_call_type(x):
                     x_str = str(x).strip()
-                    if x_str == "[S]: Advisor QA": return "QA"
-                    elif x_str in ["[S]: Advisor Onboarding", "[S]: Senior Onboarding"]: return "OB"
+                    if x_str == "[S]: Advisor QA": return "OOH"
+                    elif x_str in ["[S]: Advisor Onboarding", "[S]: Senior Onboarding"]: return "OB/BAS"
                     elif pd.isna(x) or x_str.lower() in ['nan', 'null', '']: return "-"
                     else: return x_str
                 df['call_type'] = df['assignedgroup'].apply(map_call_type)
