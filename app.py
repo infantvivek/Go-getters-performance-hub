@@ -149,7 +149,6 @@ def parse_duration(time_str):
         return (h * 60) + m
     except: return 0
 
-# HIGHLIGHT: TTL increased to 600 seconds (10 minutes) for massive performance gains
 @st.cache_data(ttl=600, show_spinner="Connecting to Data Source...")
 def load_and_standardize(url, sheet_type):
     try:
@@ -292,8 +291,13 @@ def display_admin_discrepancies(kpi_df, dsat_df):
 def open_form_dialog(row):
     fb = row.get('feedback', '')
     tp = row.get('type', '')
+    
+    # Prepend apostrophe to force Google Sheets to read ID as Plain Text
+    raw_conv_id = str(row.get('conv_id', '')).strip()
+    safe_conv_id = f"'{raw_conv_id}" if raw_conv_id not in ["", "-", "nan"] else ""
+    
     params = {
-        ENTRY_KEY: row.get('conv_id', ''),  # Submits the raw Conversation ID instead of URL
+        ENTRY_KEY: safe_conv_id,  
         ENTRY_FEEDBACK: fb if str(fb) != "nan" and fb != "-" else "",
         ENTRY_TYPE: tp if str(tp) != "nan" and tp != "-" else ""
     }
