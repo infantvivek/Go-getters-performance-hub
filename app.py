@@ -163,7 +163,8 @@ def load_and_standardize(url, sheet_type):
             "ia": "ia_raw", "advisorcalltime": "call_raw", "sentrate": "sent_rate", 
             "satisfiedsurvey": "sat_rate", "obcalls": "ob", "qacalls": "qa", 
             "totalsurvey": "surveys", "timestamp": "ts_raw", "processed": "date_raw", "chatdsaturl": "link", "datelevelas": "date_raw",
-            "freshcallsmade": "fresh_calls_made", "connectedfreshcalls": "connected_fresh_calls", "unresolved": "unresolved"
+            "freshcallsmade": "fresh_calls_made", "connectedfreshcalls": "connected_fresh_calls", "unresolved": "unresolved",
+            "mob": "mob"
         }
         df = df.rename(columns=rmap)
         if 'email' in df.columns: df['email'] = df['email'].astype(str).str.strip().str.lower()
@@ -603,16 +604,18 @@ with tab_perf:
     c8.markdown(format_custom_card("Avg QA Call Time", qa_time_str, "#0052FF", "Activity Metric"), unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Call Abandons & Fresh Calls", unsafe_allow_html=True)
-    ca1, ca2, ca3 = st.columns(3)
+    st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Abandons, MOB & Fresh Calls", unsafe_allow_html=True)
+    ca1, ca2, ca3, ca4 = st.columns(4)
     
     tot_abandons = int(f_kpi['callabandons'].fillna(0).sum()) if 'callabandons' in f_kpi.columns else 0
+    tot_mob = int(f_kpi['mob'].fillna(0).sum()) if 'mob' in f_kpi.columns else 0
     tot_fresh_made = int(f_kpi['fresh_calls_made'].fillna(0).sum()) if 'fresh_calls_made' in f_kpi.columns else 0
     tot_fresh_conn = int(f_kpi['connected_fresh_calls'].fillna(0).sum()) if 'connected_fresh_calls' in f_kpi.columns else 0
     
     ca1.markdown(format_custom_card("Total Call Abandons", tot_abandons, "#EF4444", "Activity Metric"), unsafe_allow_html=True)
-    ca2.markdown(format_custom_card("Fresh Calls Made", tot_fresh_made, "#0052FF", "Activity Metric"), unsafe_allow_html=True)
-    ca3.markdown(format_custom_card("Connected Fresh Calls", tot_fresh_conn, "#22C55E", "Activity Metric"), unsafe_allow_html=True)
+    ca2.markdown(format_custom_card("Total MOB", tot_mob, "#EF4444", "Activity Metric"), unsafe_allow_html=True)
+    ca3.markdown(format_custom_card("Fresh Calls Made", tot_fresh_made, "#0052FF", "Activity Metric"), unsafe_allow_html=True)
+    ca4.markdown(format_custom_card("Connected Fresh Calls", tot_fresh_conn, "#22C55E", "Activity Metric"), unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Performance Trends", unsafe_allow_html=True)
