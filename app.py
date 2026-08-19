@@ -561,8 +561,8 @@ with tab_perf:
     
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Performance Summary", unsafe_allow_html=True)
     
-    c1, c2, c3 = st.columns(3)
-    c4, c5, c6 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
+    c5, c6, c7, c8 = st.columns(4)
     
     avg_sent = f_kpi['sent_rate'].dropna().mean() if not f_kpi.empty and 'sent_rate' in f_kpi.columns else 0
     
@@ -573,16 +573,34 @@ with tab_perf:
     tot_ob = int(f_kpi['ob'].fillna(0).sum()) if not f_kpi.empty else 0
     tot_qa = int(f_kpi['qa'].fillna(0).sum()) if not f_kpi.empty else 0
     
-    c1.markdown(create_metric_card("Avg Survey Sent", avg_sent, 85, True, "Target: >85%"), unsafe_allow_html=True)
-    c2.markdown(create_metric_card("Avg Satisfied (True Aggregate)", avg_sat, 90, True, "Target: >90%"), unsafe_allow_html=True)
-    c3.markdown(create_metric_card("Total Surveys", tot_surveys, None, False), unsafe_allow_html=True)
-    
-    c4.markdown(create_metric_card("Total OB Calls", tot_ob, None, False), unsafe_allow_html=True)
-    c5.markdown(create_metric_card("Total QA Calls", tot_qa, None, False), unsafe_allow_html=True)
+    ob_time_str = "-"
+    if not f_kpi.empty and 'avgobcalltime' in f_kpi.columns:
+        mean_td_ob = pd.to_timedelta(f_kpi['avgobcalltime'].astype(str), errors='coerce').mean()
+        if pd.notna(mean_td_ob):
+            ts_ob = mean_td_ob.total_seconds()
+            ob_time_str = f"{int(ts_ob // 3600):02d}:{int((ts_ob % 3600) // 60):02d}:{int(ts_ob % 60):02d}"
+
+    qa_time_str = "-"
+    if not f_kpi.empty and 'avgqacalltime' in f_kpi.columns:
+        mean_td_qa = pd.to_timedelta(f_kpi['avgqacalltime'].astype(str), errors='coerce').mean()
+        if pd.notna(mean_td_qa):
+            ts_qa = mean_td_qa.total_seconds()
+            qa_time_str = f"{int(ts_qa // 3600):02d}:{int((ts_qa % 3600) // 60):02d}:{int(ts_qa % 60):02d}"
 
     avg_ia_hrs = (f_kpi['ia_min'].mean() / 60) if (not f_kpi.empty and 'ia_min' in f_kpi.columns) else 0
     ia_color = "#22C55E" if avg_ia_hrs > 6 else ("#F59E0B" if avg_ia_hrs >= 5 else "#EF4444")
-    c6.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: >6.0h"), unsafe_allow_html=True)
+    
+    # ROW 1
+    c1.markdown(create_metric_card("Avg Survey Sent", avg_sent, 85, True, "Target: >85%"), unsafe_allow_html=True)
+    c2.markdown(create_metric_card("Avg Satisfied (True Aggregate)", avg_sat, 90, True, "Target: >90%"), unsafe_allow_html=True)
+    c3.markdown(create_metric_card("Total Surveys", tot_surveys, None, False), unsafe_allow_html=True)
+    c4.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: >6.0h"), unsafe_allow_html=True)
+
+    # ROW 2
+    c5.markdown(create_metric_card("Total OB Calls", tot_ob, None, False), unsafe_allow_html=True)
+    c6.markdown(format_custom_card("Avg OB Call Time", ob_time_str, "#0052FF", "Activity Metric"), unsafe_allow_html=True)
+    c7.markdown(create_metric_card("Total QA Calls", tot_qa, None, False), unsafe_allow_html=True)
+    c8.markdown(format_custom_card("Avg QA Call Time", qa_time_str, "#0052FF", "Activity Metric"), unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown(f"### <img src='{LOGO_URL}' class='tab-logo'> Call Abandons & Fresh Calls", unsafe_allow_html=True)
@@ -714,7 +732,6 @@ with tab_dsat:
     with tab_neg:
         st.markdown("#### DSAT Details & Action Plan")
         
-        # --- NEW: Admin/Manager Filter ---
         dsat_filter = "All"
         if access in ["Admin", "Manager"]:
             dsat_filter = st.radio(
