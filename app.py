@@ -293,6 +293,7 @@ def open_form_dialog(row):
     fb = row.get('feedback', '')
     tp = row.get('type', '')
     
+    # Prepend apostrophe to force Google Sheets to read ID as Plain Text
     raw_conv_id = str(row.get('conv_id', '')).strip()
     safe_conv_id = f"'{raw_conv_id}" if raw_conv_id not in ["", "-", "nan"] else ""
     
@@ -463,6 +464,8 @@ if 'email' not in k_f.columns:
 # --- 6. HIERARCHY DRILL-DOWN ---
 access = str(user.get('level', 'IC')).strip()
 scoped_emails = []
+
+# New logic for hiding the advisor column in tables
 show_advisor_col = True
 
 if access in ["Admin", "Manager"]:
@@ -498,6 +501,7 @@ with header_col2:
 
 st.success(f"Welcome **{user.get('name', 'User')}**! | Access Level : **{access}**")
 
+# --- GLOBALLY PRE-CALCULATE TRUE AGGREGATES ---
 if not f_dsat.empty and 'is_csat' in f_dsat.columns:
     agent_csat_stats = f_dsat.groupby('name').agg(
         true_surveys=('is_csat', 'count'),
@@ -519,6 +523,7 @@ tab_perf = ui_tabs[0]
 tab_dsat = ui_tabs[1]
 
 current_tab_idx = 2
+
 if access != "IC":
     tab_lead = ui_tabs[current_tab_idx]
     current_tab_idx += 1
@@ -586,11 +591,13 @@ with tab_perf:
     avg_ia_hrs = (f_kpi['ia_min'].mean() / 60) if (not f_kpi.empty and 'ia_min' in f_kpi.columns) else 0
     ia_color = "#22C55E" if avg_ia_hrs > 6 else ("#F59E0B" if avg_ia_hrs >= 5 else "#EF4444")
     
+    # ROW 1
     c1.markdown(create_metric_card("Avg Survey Sent", avg_sent, 85, True, "Target: >85%"), unsafe_allow_html=True)
     c2.markdown(create_metric_card("Avg Satisfied (True Aggregate)", avg_sat, 90, True, "Target: >90%"), unsafe_allow_html=True)
     c3.markdown(create_metric_card("Total Surveys", tot_surveys, None, False), unsafe_allow_html=True)
     c4.markdown(format_custom_card("Avg IA Hours", f"{avg_ia_hrs:.1f}h", ia_color, "Target: >6.0h"), unsafe_allow_html=True)
 
+    # ROW 2
     c5.markdown(create_metric_card("Total OB Calls", tot_ob, None, False), unsafe_allow_html=True)
     c6.markdown(format_custom_card("Avg OB Call Time", ob_time_str, "#0052FF", "Activity Metric"), unsafe_allow_html=True)
     c7.markdown(create_metric_card("Total QA Calls", tot_qa, None, False), unsafe_allow_html=True)
@@ -683,21 +690,32 @@ with tab_dsat:
     with tab_pos:
         st.markdown("#### Positive Customer Feedback")
         
-        pos_filter = "All"
-        if access in ["Admin", "Manager"]:
-            pos_filter = st.radio(
-                "Filter CSATs:", 
-                ["All", "With Comments", "Without Comments"], 
-                horizontal=True,
-                key="pos_filter_radio"
-            )
-            st.write("") # small spacer
-            
         pos_df = f_dsat[f_dsat['is_csat'] == True] if 'is_csat' in f_dsat.columns else pd.DataFrame()
         
+        pos_filter = "All"
+        adv_filter = "All Advisors"
+        
+        if access in ["Admin", "Manager"]:
+            col1, col2 = st.columns(2)
+            with col1:
+                pos_filter = st.radio(
+                    "Filter CSATs:", 
+                    ["All", "With Comments", "Without Comments"], 
+                    horizontal=True,
+                    key="pos_filter_radio"
+                )
+            with col2:
+                if show_advisor_col and not pos_df.empty:
+                    adv_options = ["All Advisors"] + sorted(pos_df['name'].dropna().astype(str).unique().tolist())
+                    adv_filter = st.selectbox("Filter by Advisor:", adv_options, key="pos_adv_filter")
+            st.write("") # small spacer
+            
         if not pos_df.empty:
             pos_table = pos_df.copy()
             
+            if adv_filter != "All Advisors":
+                pos_table = pos_table[pos_table['name'] == adv_filter]
+                
             if pos_filter == "With Comments":
                 has_comments = ~(pos_table['customercomments'].isna() | pos_table['customercomments'].astype(str).str.strip().str.lower().isin(['', 'nan', '-', 'none', 'null']))
                 pos_table = pos_table[has_comments]
@@ -742,7 +760,10 @@ with tab_dsat:
                     else:
                         r[c_idx].write("-")
             else:
-                st.info(f"No positive feedback {pos_filter.lower()} recorded for the selected period.")
+                if adv_filter != "All Advisors":
+                    st.info(f"No positive feedback {pos_filter.lower()} recorded for {adv_filter} in the selected period.")
+                else:
+                    st.info(f"No positive feedback {pos_filter.lower()} recorded for the selected period.")
         else:
             st.info("No positive feedback available for the selected period.")
             
